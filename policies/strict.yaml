@@ -1,0 +1,91 @@
+# strict.yaml -- security upper bound.
+#
+# Same zero-application-knowledge posture as generic.yaml (every `tool:*`
+# source untrusted, same state-changing/read-only classification), but
+# state-changing sinks `block` outright once the run is tainted, instead of
+# `require_approval`. No approval step to (auto-)deny; the call never
+# executes. This is the strictest posture this harness can express without
+# blocking read-only calls too, and is expected to cost the most benign
+# utility of the three defended tiers.
+
+version: "1.0"
+
+defaults:
+  sink_action: block
+
+sources:
+  - name: "tool:get_iban"
+    trust: untrusted
+  - name: "tool:send_money"
+    trust: untrusted
+  - name: "tool:schedule_transaction"
+    trust: untrusted
+  - name: "tool:update_scheduled_transaction"
+    trust: untrusted
+  - name: "tool:get_balance"
+    trust: untrusted
+  - name: "tool:get_most_recent_transactions"
+    trust: untrusted
+  - name: "tool:get_scheduled_transactions"
+    trust: untrusted
+  - name: "tool:read_file"
+    trust: untrusted
+  - name: "tool:get_user_info"
+    trust: untrusted
+  - name: "tool:update_password"
+    trust: untrusted
+  - name: "tool:update_user_info"
+    trust: untrusted
+
+sinks:
+  # State-changing: block outright once the run is tainted.
+  agentdojo.send_money:
+    - name: block_when_run_tainted
+      when: run.tainted
+      action: block
+    - name: default
+      action: allow
+  agentdojo.schedule_transaction:
+    - name: block_when_run_tainted
+      when: run.tainted
+      action: block
+    - name: default
+      action: allow
+  agentdojo.update_scheduled_transaction:
+    - name: block_when_run_tainted
+      when: run.tainted
+      action: block
+    - name: default
+      action: allow
+  agentdojo.update_password:
+    - name: block_when_run_tainted
+      when: run.tainted
+      action: block
+    - name: default
+      action: allow
+  agentdojo.update_user_info:
+    - name: block_when_run_tainted
+      when: run.tainted
+      action: block
+    - name: default
+      action: allow
+
+  # Read-only: always allow.
+  agentdojo.get_iban:
+    - name: default
+      action: allow
+  agentdojo.get_balance:
+    - name: default
+      action: allow
+  agentdojo.get_most_recent_transactions:
+    - name: default
+      action: allow
+  agentdojo.get_scheduled_transactions:
+    - name: default
+      action: allow
+  agentdojo.read_file:
+    - name: default
+      action: allow
+  agentdojo.get_user_info:
+    - name: default
+      action: allow

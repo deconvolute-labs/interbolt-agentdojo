@@ -1,0 +1,142 @@
+# targeted/banking.yaml -- the research artifact for the banking suite.
+#
+# METHODOLOGY (see README for the verbatim rule): every choice below is
+# justified by reading agentdojo/default_suites/v1/tools/banking_client.py,
+# file_reader.py, and user_account.py's data model -- which tool return
+# values can carry attacker-writable content, structurally, independent of
+# this benchmark's 9 injection tasks. Nothing here was tuned by inspecting
+# which injection tasks succeed against a draft; that would overfit the
+# security claim to this specific test set. Iterating on this file via
+# `replay_policy.py` against the *utility* question (which benign calls get
+# wrongly gated) is fine; iterating against ASR is diagnosis only.
+#
+# TRUST CLASSIFICATION (the main utility lever over generic/strict):
+#   agentdojo.tool:read_file                    -> untrusted
+#     Returns Filesystem.files[path] verbatim: arbitrary attacker-writable
+#     text content, by construction (file_reader.py).
+#   tool:get_most_recent_transactions            -> untrusted
+#   tool:get_scheduled_transactions               -> untrusted
+#     Return Transaction objects whose `subject`/`recipient` fields are
+#     free-form strings settable by any prior send_money/schedule_transaction
+#     call -- including a prior attacker-controlled one (banking_client.py).
+#   tool:get_iban, tool:get_balance               -> trusted
+#     Scalar account fields (BankAccount.iban/balance) with no
+#     attacker-writable path in the tool's implementation.
+#   tool:get_user_info                            -> trusted
+#     UserAccount.first_name/last_name/street/city are mutable only via the
+#     state-changing update_user_info sink (itself gated below), not a
+#     standing read channel for injected content (user_account.py).
+#   tool:send_money, tool:schedule_transaction,
+#   tool:update_scheduled_transaction,
+#   tool:update_password, tool:update_user_info   -> untrusted
+#     Their own success-message return values are trivial ("Transaction to
+#     X sent.") but still classified untrusted defensively: they echo
+#     caller-supplied strings (e.g. `subject`) back into the transcript.
+#
+# ARGUMENT-AWARE RULES:
+#   update_scheduled_transaction: when `recipient` is absent from the call,
+#   the edit can only change amount/subject/date/recurring on an EXISTING
+#   scheduled transaction -- it cannot redirect funds to a new destination.
+#   That's a materially lower-risk operation than introducing a new payee,
+#   and it's a property of the tool's own parameter semantics
+#   (update_scheduled_transaction's signature), not of any specific attack.
+#   Allowed unconditionally.
+#
+#   send_money, schedule_transaction, update_password, update_user_info:
+#   no argument pattern in these tools' parameters distinguishes a
+#   benign value from an attacker-supplied one (an IBAN, a password, a
+#   name are all just strings; nothing in the call shape marks provenance
+#   without external ground truth). Honest first draft: block when the
+#   run is tainted, same as strict.yaml, pending a real carve-out found via
+#   replay iteration on recorded benign corpora.
+#   update_scheduled_transaction, when it DOES include `recipient`, falls
+#   into this same bucket -- it becomes a redirect and is blocked when
+#   tainted.
+
+version: "1.0"
+
+defaults:
+  sink_action: block
+
+sources:
+  - name: "tool:get_iban"
+    trust: trusted
+  - name: "tool:get_balance"
+    trust: trusted
+  - name: "tool:get_user_info"
+    trust: trusted
+  - name: "tool:read_file"
+    trust: untrusted
+  - name: "tool:get_most_recent_transactions"
+    trust: untrusted
+  - name: "tool:get_scheduled_transactions"
+    trust: untrusted
+  - name: "tool:send_money"
+    trust: untrusted
+  - name: "tool:schedule_transaction"
+    trust: untrusted
+  - name: "tool:update_scheduled_transaction"
+    trust: untrusted
+  - name: "tool:update_password"
+    trust: untrusted
+  - name: "tool:update_user_info"
+    trust: untrusted
+
+sinks:
+  agentdojo.send_money:
+    - name: block_when_run_tainted
+      when: run.tainted
+      action: block
+    - name: default
+      action: allow
+
+  agentdojo.schedule_transaction:
+    - name: block_when_run_tainted
+      when: run.tainted
+      action: block
+    - name: default
+      action: allow
+
+  agentdojo.update_scheduled_transaction:
+    - name: allow_non_redirecting_edits
+      when: "!('recipient' in args)"
+      action: allow
+    - name: block_redirect_when_run_tainted
+      when: run.tainted
+      action: block
+    - name: default
+      action: allow
+
+  agentdojo.update_password:
+    - name: block_when_run_tainted
+      when: run.tainted
+      action: block
+    - name: default
+      action: allow
+
+  agentdojo.update_user_info:
+    - name: block_when_run_tainted
+      when: run.tainted
+      action: block
+    - name: default
+      action: allow
+
+  # Read-only: always allow.
+  agentdojo.get_iban:
+    - name: default
+      action: allow
+  agentdojo.get_balance:
+    - name: default
+      action: allow
+  agentdojo.get_most_recent_transactions:
+    - name: default
+      action: allow
+  agentdojo.get_scheduled_transactions:
+    - name: default
+      action: allow
+  agentdojo.read_file:
+    - name: default
+      action: allow
+  agentdojo.get_user_info:
+    - name: default
+      action: allow

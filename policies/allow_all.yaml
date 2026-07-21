@@ -1,0 +1,77 @@
+# allow_all.yaml -- plumbing verification policy.
+#
+# Every banking sink allows unconditionally, regardless of `run.tainted` or
+# argument content. A run under this policy in `enforce` mode MUST
+# reproduce the undefended baseline exactly: same utility, zero blocks --
+# it exercises the executor/reporter/run-scoping plumbing end-to-end
+# without changing any tool call's outcome. See acceptance checklist item 3
+# in the build spec.
+
+version: "1.0"
+
+defaults:
+  sink_action: allow
+
+# Trust doesn't matter here -- defaults.sink_action and every sink rule
+# below are unconditional `allow`, so nothing ever reads `run.tainted` or
+# `max_trust`. Declared anyway so every policy file documents the same
+# source set (one entry per banking tool, since the executor taints every
+# allowed call's result under `tool:<name>`).
+sources:
+  - name: "tool:get_iban"
+    trust: trusted
+  - name: "tool:send_money"
+    trust: trusted
+  - name: "tool:schedule_transaction"
+    trust: trusted
+  - name: "tool:update_scheduled_transaction"
+    trust: trusted
+  - name: "tool:get_balance"
+    trust: trusted
+  - name: "tool:get_most_recent_transactions"
+    trust: trusted
+  - name: "tool:get_scheduled_transactions"
+    trust: trusted
+  - name: "tool:read_file"
+    trust: trusted
+  - name: "tool:get_user_info"
+    trust: trusted
+  - name: "tool:update_password"
+    trust: trusted
+  - name: "tool:update_user_info"
+    trust: trusted
+
+sinks:
+  agentdojo.get_iban:
+    - name: default
+      action: allow
+  agentdojo.send_money:
+    - name: default
+      action: allow
+  agentdojo.schedule_transaction:
+    - name: default
+      action: allow
+  agentdojo.update_scheduled_transaction:
+    - name: default
+      action: allow
+  agentdojo.get_balance:
+    - name: default
+      action: allow
+  agentdojo.get_most_recent_transactions:
+    - name: default
+      action: allow
+  agentdojo.get_scheduled_transactions:
+    - name: default
+      action: allow
+  agentdojo.read_file:
+    - name: default
+      action: allow
+  agentdojo.get_user_info:
+    - name: default
+      action: allow
+  agentdojo.update_password:
+    - name: default
+      action: allow
+  agentdojo.update_user_info:
+    - name: default
+      action: allow

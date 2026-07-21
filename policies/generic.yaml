@@ -1,0 +1,108 @@
+# generic.yaml -- zero application knowledge.
+#
+# Design principle (portable to any suite verbatim): every state-changing
+# sink requires approval once the run has ingested any tool output ("the
+# run is tainted"); every read-only sink always allows. With
+# `approval_resolver=auto_deny` (never overridden, see README), a
+# `require_approval` decision always denies -- it scores as blocked for
+# security, as failure for utility. This tier assumes nothing about which
+# specific tool outputs are trustworthy: every `tool:*` source below is
+# `untrusted`, so a single read call anywhere in the run gates every later
+# state-changing call.
+#
+# The concrete sink keys below are banking-specific (this is the only
+# suite wired up in v1); a new suite copies this same design principle --
+# classify its own tools as state-changing/read-only from their
+# implementations, declare every `tool:*` source untrusted, gate the
+# state-changing sinks -- into its own file, not by editing this one.
+#
+# Banking tool classification, from reading
+# agentdojo/default_suites/v1/tools/banking_client.py and
+# .../tools/user_account.py (mutates account state -> state-changing;
+# returns data without mutation -> read-only):
+#   state-changing: send_money, schedule_transaction,
+#     update_scheduled_transaction, update_password, update_user_info
+#   read-only: get_iban, get_balance, get_most_recent_transactions,
+#     get_scheduled_transactions, read_file, get_user_info
+
+version: "1.0"
+
+defaults:
+  sink_action: require_approval
+
+sources:
+  - name: "tool:get_iban"
+    trust: untrusted
+  - name: "tool:send_money"
+    trust: untrusted
+  - name: "tool:schedule_transaction"
+    trust: untrusted
+  - name: "tool:update_scheduled_transaction"
+    trust: untrusted
+  - name: "tool:get_balance"
+    trust: untrusted
+  - name: "tool:get_most_recent_transactions"
+    trust: untrusted
+  - name: "tool:get_scheduled_transactions"
+    trust: untrusted
+  - name: "tool:read_file"
+    trust: untrusted
+  - name: "tool:get_user_info"
+    trust: untrusted
+  - name: "tool:update_password"
+    trust: untrusted
+  - name: "tool:update_user_info"
+    trust: untrusted
+
+sinks:
+  # State-changing: require approval (== auto-denied) once the run is tainted.
+  agentdojo.send_money:
+    - name: gate_when_run_tainted
+      when: run.tainted
+      action: require_approval
+    - name: default
+      action: allow
+  agentdojo.schedule_transaction:
+    - name: gate_when_run_tainted
+      when: run.tainted
+      action: require_approval
+    - name: default
+      action: allow
+  agentdojo.update_scheduled_transaction:
+    - name: gate_when_run_tainted
+      when: run.tainted
+      action: require_approval
+    - name: default
+      action: allow
+  agentdojo.update_password:
+    - name: gate_when_run_tainted
+      when: run.tainted
+      action: require_approval
+    - name: default
+      action: allow
+  agentdojo.update_user_info:
+    - name: gate_when_run_tainted
+      when: run.tainted
+      action: require_approval
+    - name: default
+      action: allow
+
+  # Read-only: always allow.
+  agentdojo.get_iban:
+    - name: default
+      action: allow
+  agentdojo.get_balance:
+    - name: default
+      action: allow
+  agentdojo.get_most_recent_transactions:
+    - name: default
+      action: allow
+  agentdojo.get_scheduled_transactions:
+    - name: default
+      action: allow
+  agentdojo.read_file:
+    - name: default
+      action: allow
+  agentdojo.get_user_info:
+    - name: default
+      action: allow

@@ -1,0 +1,3 @@
+from interbolt_agentdojo.models_ext import register_current_models
+
+register_current_models()

@@ -1,0 +1,38 @@
+[project]
+name = "interbolt-agentdojo"
+version = "0.1.0"
+description = "Benchmarks of Interbolt on AgentDojo."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "agentdojo",
+    "interbolt",
+    "anthropic",
+    "pyyaml",
+]
+
+[dependency-groups]
+dev = ["pytest"]
+
+# Interbolt source toggle:
+#
+# Dev (default below): editable path dependency against the sibling checkout,
+# so local interbolt changes are picked up without reinstalling.
+#
+# Pinned (for published results): delete the `interbolt` line from
+# [tool.uv.sources] below and instead pin an exact release in
+# [project.dependencies], e.g. "interbolt==0.1.1". Published numbers MUST be
+# produced with the pinned state (see run_manifest.json's `interbolt.install_mode`).
+[tool.uv.sources]
+interbolt = { path = "../interbolt", editable = true }
+agentdojo = { path = "../agentdojo", editable = true }
+
+# Pinned agentdojo, for reference (published runs should switch to this form):
+# agentdojo = { git = "https://github.com/ethz-spylab/agentdojo", rev = "089ed468cf3ed0322acc66b0211f26d9d90dbf60" }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/interbolt_agentdojo"]
