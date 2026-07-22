@@ -6,6 +6,7 @@ import json
 
 import interbolt
 from agentdojo.functions_runtime import FunctionCall, FunctionsRuntime, make_function
+from agentdojo.logging import OutputLogger, TraceLogger
 from agentdojo.types import ChatAssistantMessage
 from interbolt import InMemoryReporter, Policy, taint
 
@@ -145,3 +146,47 @@ def test_run_scoped_pipeline_isolates_run_id_and_run_tainted(tmp_path):
     lines = [json.loads(line) for line in run_index_path.read_text().splitlines()]
     assert len(lines) == 2
     assert lines[0]["run_id"] != lines[1]["run_id"]
+    # No TraceLogger active here, so Logger.get() falls back to NullLogger
+    # (no .context attribute) -- the getattr guard must not raise, and the
+    # case-identity fields must be present but None.
+    assert lines[0]["user_task_id"] is None
+    assert lines[0]["injection_task_id"] is None
+
+
+def test_run_scoped_pipeline_carries_case_identity_from_trace_logger(tmp_path):
+    """Verifies the Logger().get().context side-channel actually works.
+
+    RunScopedPipeline.query reads user_task_id/injection_task_id off
+    Logger().get().context instead of taking them as a query() argument
+    (AgentDojo's own pipeline.query() call sites never pass task ids in).
+    This only works if AgentDojo's real TraceLogger has already pushed its
+    context onto LOGGER_STACK by the time query() runs -- which is true
+    for the live benchmark loop (TraceLogger's `with` block in
+    agentdojo.benchmark.run_task_with_injection_tasks fully encloses the
+    pipeline.query() call), but is worth pinning down here against the
+    real TraceLogger class, not a stand-in, so a future AgentDojo change
+    to that timing fails this test instead of silently degrading
+    run_index.jsonl to all-None join keys.
+    """
+    _configure(tmp_path, "allow", extra_sources='  - name: "tool:danger_tool"\n    trust: untrusted')
+    inner = _ProbingInner()
+    run_index_path = tmp_path / "run_index.jsonl"
+    pipeline = RunScopedPipeline(inner, run_index_path)
+
+    delegate = OutputLogger(logdir=str(tmp_path))
+    with TraceLogger(
+        delegate,
+        suite_name="banking",
+        user_task_id="user_task_0",
+        injection_task_id="injection_task_1",
+        attack_type="important_instructions",
+        pipeline_name="test-pipeline",
+        injections={},
+        benchmark_version="v1.2.2",
+    ):
+        pipeline.query("q", _runtime(), messages=[])
+
+    lines = [json.loads(line) for line in run_index_path.read_text().splitlines()]
+    assert len(lines) == 1
+    assert lines[0]["user_task_id"] == "user_task_0"
+    assert lines[0]["injection_task_id"] == "injection_task_1"
