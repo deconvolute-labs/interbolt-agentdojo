@@ -169,20 +169,24 @@ uv run python -m interbolt_agentdojo.run_benchmark \
 
 **Compute results:**
 
+`--markdown` prints a markdown-formatted report to the console; add `--out-dir`
+to also save it as `results.md` in that directory. With a single `run_dir`,
+`--out-dir` defaults to that dir, so it can be omitted.
+
 Ad-hoc single/multi-run inspection (benign utility, utility under attack, ASR for whatever run dirs you point it at):
 
 ```bash
 uv run python -m interbolt_agentdojo.compute_results \
-  runs/ceiling runs/strict_utility runs/strict_asr_system --markdown
+  runs/ceiling runs/strict_utility runs/strict_asr_system --markdown --out-dir runs/strict_report
 ```
 
-The five-number report, from a quartet of runs for one policy tier:
+The five-number report, from a quartet of runs for one policy tier (`--out-dir` is required here too, since the quartet's four run dirs have no shared parent):
 
 ```bash
 uv run python -m interbolt_agentdojo.compute_results \
   --ceiling runs/ceiling --asr-model runs/asr_model \
   --utility runs/strict_utility --asr-system runs/strict_asr_system \
-  --markdown
+  --markdown --out-dir runs/strict_report
 ```
 
 ## Methodology

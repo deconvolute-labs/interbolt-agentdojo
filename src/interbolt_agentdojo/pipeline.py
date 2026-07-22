@@ -142,7 +142,7 @@ class ProgressLoggingPipeline(BasePipelineElement):
         self.total = total
         self.start = time.monotonic()
         self.request_count = 0
-        self.recent: collections.deque[str] = collections.deque(maxlen=10)
+        self.recent: collections.deque[str] = collections.deque(maxlen=2)
         self.seen: set[Path] = set()
 
         if self.repeat_dir.exists():

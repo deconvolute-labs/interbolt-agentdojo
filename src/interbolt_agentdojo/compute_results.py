@@ -189,14 +189,15 @@ def _print_text(results: list[dict]) -> None:
             print(f"  ** {total_errors} policy evaluation errors -- investigate before publishing **")
 
 
-def _print_markdown(results: list[dict]) -> None:
-    print("| Configuration        | Benign utility | Utility under attack | Targeted ASR |")
-    print("|-----------------------|----------------|-----------------------|--------------|")
+def _render_markdown(results: list[dict]) -> str:
+    lines = []
+    lines.append("| Configuration        | Benign utility | Utility under attack | Targeted ASR |")
+    lines.append("|-----------------------|----------------|-----------------------|--------------|")
     for r in results:
-        print(f"| {r['label']} | {_spread(r['benign_utility'])} | {_spread(r['utility_under_attack'])} | {_spread(r['asr'])} |")
-    print()
-    print("| Configuration | Blocks | Approvals denied | Eval errors | Top matched rules |")
-    print("|---------------|--------|-------------------|-------------|-------------------|")
+        lines.append(f"| {r['label']} | {_spread(r['benign_utility'])} | {_spread(r['utility_under_attack'])} | {_spread(r['asr'])} |")
+    lines.append("")
+    lines.append("| Configuration | Blocks | Approvals denied | Eval errors | Top matched rules |")
+    lines.append("|---------------|--------|-------------------|-------------|-------------------|")
     for r in results:
         blocks = sum(e["blocks"] for e in r["events"])
         approvals = sum(e["approvals_denied"] for e in r["events"])
@@ -206,7 +207,12 @@ def _print_markdown(results: list[dict]) -> None:
             for rule, count in e["top_rules"]:
                 top_rules[rule] += count
         top = ", ".join(f"{rule} ({count})" for rule, count in top_rules.most_common(3))
-        print(f"| {r['label']} | {blocks} | {approvals} | {errors} | {top} |")
+        lines.append(f"| {r['label']} | {blocks} | {approvals} | {errors} | {top} |")
+    return "\n".join(lines)
+
+
+def _print_markdown(results: list[dict]) -> None:
+    print(_render_markdown(results))
 
 
 # ---------------------------------------------------------------------------
@@ -450,26 +456,27 @@ def _print_quartet_text(r: dict) -> None:
         print(f"  ** {r['eval_errors']} policy evaluation errors -- investigate before publishing **")
 
 
-def _print_quartet_markdown(r: dict) -> None:
-    print("| Config | Utility ceiling | Utility w/ policy | Retention | ASR_model | ASR_system | Interbolt block-rate |")
-    print("|---|---|---|---|---|---|---|")
+def _render_quartet_markdown(r: dict) -> str:
+    lines = []
+    lines.append("| Config | Utility ceiling | Utility w/ policy | Retention | ASR_model | ASR_system | Interbolt block-rate |")
+    lines.append("|---|---|---|---|---|---|---|")
     block_rate = _spread(r["block_rate_interbolt"]) or "undefined"
-    print(
+    lines.append(
         f"| {r['label']} | {_spread(r['utility_ceiling'])} | {_spread(r['utility_interbolt'])} | "
         f"{_spread(r['retention'])} | {_spread(r['asr_model'])} | {_spread(r['asr_system'])} | {block_rate} |"
     )
-    print()
-    print(
+    lines.append("")
+    lines.append(
         "| Config | model_refused | out_of_scope | interbolt_blocked | attack_succeeded_defended "
         "| ambiguous_sink_match | attack_failed_unattributed |"
     )
-    print("|---|---|---|---|---|---|---|")
+    lines.append("|---|---|---|---|---|---|---|")
     t = r["taxonomy"]
     taxonomy_cells = " | ".join(str(t.get(key, 0)) for key in _TAXONOMY_KEYS)
-    print(f"| {r['label']} | {taxonomy_cells} |")
-    print()
-    print("| Configuration | Blocks (benign + attack runs) | Approvals denied | Eval errors | Top matched rules |")
-    print("|---------------|-------------------------------|-------------------|-------------|--------------------|")
+    lines.append(f"| {r['label']} | {taxonomy_cells} |")
+    lines.append("")
+    lines.append("| Configuration | Blocks (benign + attack runs) | Approvals denied | Eval errors | Top matched rules |")
+    lines.append("|---------------|-------------------------------|-------------------|-------------|--------------------|")
     blocks = sum(e["blocks"] for e in r["events_cd"])
     approvals = sum(e["approvals_denied"] for e in r["events_cd"])
     top_rules: Counter = Counter()
@@ -477,7 +484,19 @@ def _print_quartet_markdown(r: dict) -> None:
         for rule, count in e["top_rules"]:
             top_rules[rule] += count
     top = ", ".join(f"{rule} ({count})" for rule, count in top_rules.most_common(3))
-    print(f"| {r['label']} | {blocks} | {approvals} | {r['eval_errors']} | {top} |")
+    lines.append(f"| {r['label']} | {blocks} | {approvals} | {r['eval_errors']} | {top} |")
+    return "\n".join(lines)
+
+
+def _print_quartet_markdown(r: dict) -> None:
+    print(_render_quartet_markdown(r))
+
+
+def _write_markdown_file(out_dir: Path, content: str) -> Path:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / "results.md"
+    path.write_text(content)
+    return path
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -488,6 +507,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--utility", type=Path, help="run C: no attack, <policy> enforce")
     parser.add_argument("--asr-system", type=Path, help="run D: attack, <policy> enforce")
     parser.add_argument("--markdown", action="store_true")
+    parser.add_argument(
+        "--out-dir",
+        type=Path,
+        help="directory to write results.md into (defaults to the single run_dir in ad-hoc mode; "
+        "required with --markdown otherwise)",
+    )
     parser.add_argument("--allow-dirty", action="store_true")
     return parser
 
@@ -508,13 +533,26 @@ def main() -> None:
     if all(given):
         result = _five_numbers(args.ceiling, args.asr_model, args.utility, args.asr_system, args.allow_dirty)
         if args.markdown:
-            _print_quartet_markdown(result)
+            text = _render_quartet_markdown(result)
+            print(text)
+            if args.out_dir is None:
+                parser.error("--out-dir is required with --markdown in quartet mode")
+            path = _write_markdown_file(args.out_dir, text)
+            print(f"wrote {path}")
         else:
             _print_quartet_text(result)
     else:
         results = [compute_run(run_dir, args.allow_dirty) for run_dir in args.run_dirs]
         if args.markdown:
-            _print_markdown(results)
+            text = _render_markdown(results)
+            print(text)
+            out_dir = args.out_dir
+            if out_dir is None:
+                if len(args.run_dirs) != 1:
+                    parser.error("--out-dir is required with --markdown when multiple run_dirs are given")
+                out_dir = args.run_dirs[0]
+            path = _write_markdown_file(out_dir, text)
+            print(f"wrote {path}")
         else:
             _print_text(results)
 
