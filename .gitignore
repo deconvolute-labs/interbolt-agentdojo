@@ -46,3 +46,4 @@ runs/*
 !runs/published/
 .env
 .python-version
+results/
