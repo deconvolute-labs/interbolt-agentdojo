@@ -9,6 +9,7 @@ dependencies = [
     "interbolt",
     "anthropic",
     "google-genai",
+    "openai",
     "pyyaml",
 ]
 

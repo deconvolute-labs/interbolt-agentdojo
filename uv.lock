@@ -779,6 +779,7 @@ dependencies = [
     { name = "anthropic" },
     { name = "google-genai" },
     { name = "interbolt" },
+    { name = "openai" },
     { name = "pyyaml" },
 ]
 
@@ -793,6 +794,7 @@ requires-dist = [
     { name = "anthropic" },
     { name = "google-genai" },
     { name = "interbolt", editable = "../interbolt" },
+    { name = "openai" },
     { name = "pyyaml" },
 ]
 

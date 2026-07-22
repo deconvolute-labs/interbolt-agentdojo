@@ -12,7 +12,7 @@ uv sync
 
 Requires Python 3.12+ (see `pyproject.toml`).
 
-**API keys** live in environment variables only, never in files. `.env` is gitignored; put keys there or export them in your shell. AgentDojo's Anthropic provider constructs `anthropic.Anthropic()` with no explicit key argument, so it relies on the Anthropic SDK's own default: `ANTHROPIC_API_KEY`. Gemini models use `GOOGLE_API_KEY` (a Gemini Developer API / AI Studio key): `models_ext.make_llm` reads it explicitly and constructs `genai.Client(api_key=...)` itself, bypassing AgentDojo's own Google provider wiring, which defaults to Vertex AI (GCP project + `gcloud auth application-default login`) instead of a plain API key.
+**API keys** live in environment variables only, never in files. `.env` is gitignored; put keys there or export them in your shell. AgentDojo's Anthropic provider constructs `anthropic.Anthropic()` with no explicit key argument, so it relies on the Anthropic SDK's own default: `ANTHROPIC_API_KEY`. Gemini models use `GOOGLE_API_KEY` (a Gemini Developer API / AI Studio key): `models_ext.make_llm` reads it explicitly and constructs `genai.Client(api_key=...)` itself, bypassing AgentDojo's own Google provider wiring, which defaults to Vertex AI (GCP project + `gcloud auth application-default login`) instead of a plain API key. OpenAI models use `OPENAI_API_KEY`: both AgentDojo's own `"openai"` provider wiring and `models_ext.make_llm`'s OpenAI branch construct a bare `openai.OpenAI()`, relying on the OpenAI SDK's own default, same as Anthropic.
 
 **Interbolt source toggle** (`pyproject.toml`):
 
@@ -32,11 +32,11 @@ Requires Python 3.12+ (see `pyproject.toml`).
 
 `run_manifest.json` (see Methodology) records which state was active for every run; `compute_results.py` refuses to include an editable-install or dirty-tree run in a publishable table unless you pass `--allow-dirty`.
 
-**Known-good models.** `--model` is a plain string everywhere; any id AgentDojo's `ModelsEnum` already knows works as-is, and anything else goes through `models_ext.make_llm` (see Design choices below). `claude-3-haiku-20240307`, the id AgentDojo's enum lists as its cheap-iteration Haiku, has been fully retired by Anthropic (confirmed live: the API 404s on it) -- use **`claude-haiku-4-5-20251001`** instead for cheap iteration (note: still a comparatively weak tool-caller; results from it are plumbing-verification only). For published runs, one current frontier model per provider, exact dated snapshot id pinned here once chosen (e.g. `claude-sonnet-5` for Anthropic).
+**Known-good models.** `--model` is a plain string everywhere; any id AgentDojo's `ModelsEnum` already knows works as-is, and anything else goes through `models_ext.make_llm` (see Design choices below). `claude-3-haiku-20240307`, the id AgentDojo's enum lists as its cheap-iteration Haiku, has been fully retired by Anthropic (confirmed live: the API 404s on it) -- use **`claude-haiku-4-5-20251001`** instead for cheap iteration (note: still a comparatively weak tool-caller; results from it are plumbing-verification only). For published runs, one current frontier model per provider, exact dated snapshot id pinned here once chosen (e.g. `claude-sonnet-5` for Anthropic). OpenAI ids already in the enum -- `gpt-3.5-turbo-0125`, `gpt-4o-2024-05-13`, `gpt-4o-mini-2024-07-18`, `gpt-4-0125-preview`, `gpt-4-turbo-2024-04-09` -- work as plain strings with no bypass; a newer/unenumerated GPT or `o1`/`o3` id goes through `models_ext.make_llm`'s OpenAI branch instead.
 
 ## Design choices
 
-**Model registry patching.** AgentDojo's `ModelsEnum` is a `StrEnum` and tops out around Claude 3.7 -- it can't be extended at runtime, and forking AgentDojo to patch it would mean carrying patches against every future AgentDojo version instead of pinning a SHA. Instead, `models_ext.make_llm(model_string)` constructs the provider client (`AnthropicLLM` or `GoogleLLM`) directly and passes the resulting object as `PipelineConfig(llm=...)`, which AgentDojo already accepts alongside a `ModelsEnum` string (see `AgentPipeline.from_config`'s `isinstance(config.llm, str)` branch). AgentDojo stays unmodified and pinnable; new model ids are a one-line addition to our own adapter, not a patch to theirs. The same bypass also overrides AgentDojo's default *auth mode* for a provider, not just unknown ids: `gemini-1.5-flash-001` is already `ModelsEnum`-known (but not served anymore), but AgentDojo's own `get_llm()` wires Google models to Vertex AI, so `run_benchmark._resolve_model` forces every `gemini-` id through `make_llm` regardless of enum membership to get a `GOOGLE_API_KEY`-based client instead.
+**Model registry patching.** AgentDojo's `ModelsEnum` is a `StrEnum` and tops out around Claude 3.7 / GPT-4o-mini-2024-07-18 -- it can't be extended at runtime, and forking AgentDojo to patch it would mean carrying patches against every future AgentDojo version instead of pinning a SHA. Instead, `models_ext.make_llm(model_string)` constructs the provider client (`AnthropicLLM`, `GoogleLLM`, or `OpenAILLM`) directly and passes the resulting object as `PipelineConfig(llm=...)`, which AgentDojo already accepts alongside a `ModelsEnum` string (see `AgentPipeline.from_config`'s `isinstance(config.llm, str)` branch). AgentDojo stays unmodified and pinnable; new model ids are a one-line addition to our own adapter, not a patch to theirs. The same bypass also overrides AgentDojo's default *auth mode* for a provider, not just unknown ids: `gemini-1.5-flash-001` is already `ModelsEnum`-known (but not served anymore), but AgentDojo's own `get_llm()` wires Google models to Vertex AI, so `run_benchmark._resolve_model` forces every `gemini-` id through `make_llm` regardless of enum membership to get a `GOOGLE_API_KEY`-based client instead. OpenAI has no such auth-mode mismatch to route around -- AgentDojo's own `"openai"` provider already uses a plain `OPENAI_API_KEY`-based client -- so `make_llm`'s `gpt-`/`o1`/`o3` branch exists solely to catch not-yet-enumerated ids, which would otherwise silently fall through to the Anthropic default.
 
 **Block message constant.** A blocked or denied tool call always returns the exact string `"Blocked by security policy."` as its error -- never the matched rule name or CEL condition text. That detail is model-visible context; leaking it hands an attacker free information about exactly which policy edge to route around next. Every decision's full detail (rule, condition, contributing labels) still reaches the reporter's `interbolt_events.jsonl` -- it's just never echoed back into the transcript the model reads.
 
@@ -96,6 +96,15 @@ uv run python -m interbolt_agentdojo.run_benchmark \
 ```
 
 ~144 cases, a few minutes, low single-digit dollars with Haiku.
+
+Swap `--model` for an OpenAI id the same way, with `OPENAI_API_KEY` set instead:
+
+```bash
+uv run python -m interbolt_agentdojo.run_benchmark \
+  --suite banking --model gpt-3.5-turbo-0125 \
+  --attack important_instructions \
+  --logdir runs/baseline_openai
+```
 
 **Record a replay corpus** (one spend, two artifacts -- see epistemics note below):
 
