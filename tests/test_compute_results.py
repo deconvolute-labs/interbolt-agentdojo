@@ -364,3 +364,96 @@ def test_main_rejects_no_args(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["compute_results"])
     with pytest.raises(SystemExit):
         main()
+
+
+# ---------------------------------------------------------------------------
+# --markdown + results.md file output
+# ---------------------------------------------------------------------------
+
+
+def test_main_rejects_markdown_multi_dir_without_out_dir(tmp_path, monkeypatch):
+    dir_a = tmp_path / "a"
+    dir_b = tmp_path / "b"
+    _build_no_attack_dir(dir_a, None, {"user_task_0": True})
+    _build_no_attack_dir(dir_b, None, {"user_task_0": True})
+    monkeypatch.setattr(sys, "argv", ["compute_results", str(dir_a), str(dir_b), "--markdown", "--allow-dirty"])
+    with pytest.raises(SystemExit):
+        main()
+
+
+def test_main_rejects_quartet_markdown_without_out_dir(tmp_path, monkeypatch):
+    ceiling = tmp_path / "ceiling"
+    asr_model = tmp_path / "asr_model"
+    utility = tmp_path / "utility"
+    asr_system = tmp_path / "asr_system"
+    _build_no_attack_dir(ceiling, None, {"user_task_0": True})
+    _build_no_attack_dir(utility, STRICT_DEFENSE, {"user_task_0": True})
+    _build_attacked_dir(asr_model, ALLOW_ALL_DEFENSE, cases={"user_task_0": True})
+    _build_attacked_dir(asr_system, STRICT_DEFENSE, cases={"user_task_0": True})
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "compute_results",
+            "--ceiling", str(ceiling),
+            "--asr-model", str(asr_model),
+            "--utility", str(utility),
+            "--asr-system", str(asr_system),
+            "--markdown",
+            "--allow-dirty",
+        ],
+    )
+    with pytest.raises(SystemExit):
+        main()
+
+
+def test_main_writes_results_md_single_run_dir_default(tmp_path, monkeypatch, capsys):
+    run_dir = tmp_path / "solo"
+    _build_no_attack_dir(run_dir, None, {"user_task_0": True})
+    monkeypatch.setattr(sys, "argv", ["compute_results", str(run_dir), "--markdown", "--allow-dirty"])
+
+    main()
+
+    captured = capsys.readouterr()
+    results_path = run_dir / "results.md"
+    assert results_path.exists()
+    content = results_path.read_text()
+    assert content in captured.out
+    assert "Benign utility" in content
+
+
+def test_main_writes_results_md_to_out_dir_quartet(tmp_path, monkeypatch, capsys):
+    ceiling = tmp_path / "ceiling"
+    asr_model = tmp_path / "asr_model"
+    utility = tmp_path / "utility"
+    asr_system = tmp_path / "asr_system"
+    out_dir = tmp_path / "report"
+
+    _build_no_attack_dir(ceiling, None, {"user_task_0": True})
+    _build_no_attack_dir(utility, STRICT_DEFENSE, {"user_task_0": True})
+    _build_attacked_dir(asr_model, ALLOW_ALL_DEFENSE, cases={"user_task_0": True})
+    _build_attacked_dir(asr_system, STRICT_DEFENSE, cases={"user_task_0": True})
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "compute_results",
+            "--ceiling", str(ceiling),
+            "--asr-model", str(asr_model),
+            "--utility", str(utility),
+            "--asr-system", str(asr_system),
+            "--markdown",
+            "--allow-dirty",
+            "--out-dir", str(out_dir),
+        ],
+    )
+
+    main()
+
+    captured = capsys.readouterr()
+    results_path = out_dir / "results.md"
+    assert results_path.exists()
+    content = results_path.read_text()
+    assert content in captured.out
+    assert "Utility ceiling" in content
