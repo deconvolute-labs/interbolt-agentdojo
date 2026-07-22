@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from agentdojo.agent_pipeline.llms.anthropic_llm import AnthropicLLM
 from agentdojo.agent_pipeline.llms.google_llm import GoogleLLM
+from agentdojo.agent_pipeline.llms.openai_llm import OpenAILLM
 from agentdojo.models import MODEL_NAMES
 
 from interbolt_agentdojo.models_ext import make_llm
@@ -47,3 +48,26 @@ def test_resolve_model_forces_gemini_through_bypass_despite_enum_membership(monk
 def test_resolve_model_leaves_known_anthropic_id_as_string():
     resolved = _resolve_model("claude-3-haiku-20240307")
     assert resolved == "claude-3-haiku-20240307"
+
+
+def test_make_llm_openai_builds_openai_llm_for_unknown_gpt_id():
+    llm = make_llm("gpt-99-future-preview")
+    assert isinstance(llm, OpenAILLM)
+    assert llm.name == "gpt-99-future-preview"
+    assert MODEL_NAMES["gpt-99-future-preview"] == "GPT"
+
+
+def test_make_llm_openai_builds_openai_llm_for_reasoning_model_id():
+    llm = make_llm("o3-mini-2025-01-31")
+    assert isinstance(llm, OpenAILLM)
+    assert llm.name == "o3-mini-2025-01-31"
+    assert MODEL_NAMES["o3-mini-2025-01-31"] == "GPT"
+
+
+def test_resolve_model_leaves_known_openai_id_as_string():
+    # gpt-3.5-turbo-0125 is already a ModelsEnum member mapped to the
+    # "openai" provider in agentdojo.models.MODEL_PROVIDERS, so it needs no
+    # bypass -- it should resolve to the bare string, same as a known
+    # Anthropic id.
+    resolved = _resolve_model("gpt-3.5-turbo-0125")
+    assert resolved == "gpt-3.5-turbo-0125"
