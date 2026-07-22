@@ -19,7 +19,7 @@ from agentdojo.types import ChatMessage, ChatToolResultMessage, text_content_blo
 from interbolt import ApprovalDenied, PolicyEvaluationError, PolicyViolation, get_runtime, taint
 
 AGENT_ID = "agentdojo-agent"
-_NAMESPACE = "agentdojo"
+NAMESPACE = "agentdojo"
 _BLOCKED_MESSAGE = "Blocked by security policy."
 
 
@@ -48,7 +48,7 @@ class InterboltToolsExecutor(ToolsExecutor):
 
     def _dispatch(self, tool_call, runtime: FunctionsRuntime, env: Env) -> ChatToolResultMessage:
         interbolt_runtime = get_runtime()
-        qualified_name = f"{_NAMESPACE}.{tool_call.function}"
+        qualified_name = f"{NAMESPACE}.{tool_call.function}"
         args = dict(tool_call.args)
         try:
             decision = interbolt_runtime.check(tool=qualified_name, args=args, agent_id=AGENT_ID)

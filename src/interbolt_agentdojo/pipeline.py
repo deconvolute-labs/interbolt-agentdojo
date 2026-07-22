@@ -72,7 +72,7 @@ class RunScopedPipeline(BasePipelineElement):
     (user_task, injection_task) case, so scoping one Interbolt run per
     `query()` call keeps `run_tainted` from leaking across cases. Also
     appends the join key AgentDojo's own logs lack -- `{seq, run_id,
-    started_at}` -- to `run_index_path`.
+    user_task_id, injection_task_id, started_at}` -- to `run_index_path`.
     """
 
     def __init__(self, inner: BasePipelineElement, run_index_path: Path) -> None:
@@ -94,12 +94,19 @@ class RunScopedPipeline(BasePipelineElement):
     ):
         with interbolt.get_runtime().agent_context_sync(AGENT_ID):
             run_id = current_run_id.get()
+            # AgentDojo's TraceLogger pushes suite/task identity onto a context
+            # stack for the whole (user_task, injection_task) case; Logger.get()
+            # falls back to NullLogger (no .context) outside that scope, e.g. in
+            # direct unit-test calls, hence the getattr guard.
+            context = getattr(Logger().get(), "context", {})
             with self.run_index_path.open("a") as f:
                 f.write(
                     json.dumps(
                         {
                             "seq": self._seq,
                             "run_id": run_id,
+                            "user_task_id": context.get("user_task_id"),
+                            "injection_task_id": context.get("injection_task_id"),
                             "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                         }
                     )
