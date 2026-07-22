@@ -12,7 +12,7 @@ uv sync
 
 Requires Python 3.12+ (see `pyproject.toml`).
 
-**API keys** live in environment variables only, never in files. `.env` is gitignored; put keys there or export them in your shell. AgentDojo's Anthropic provider constructs `anthropic.Anthropic()` with no explicit key argument, so it relies on the Anthropic SDK's own default: `ANTHROPIC_API_KEY`.
+**API keys** live in environment variables only, never in files. `.env` is gitignored; put keys there or export them in your shell. AgentDojo's Anthropic provider constructs `anthropic.Anthropic()` with no explicit key argument, so it relies on the Anthropic SDK's own default: `ANTHROPIC_API_KEY`. Gemini models use `GOOGLE_API_KEY` (a Gemini Developer API / AI Studio key): `models_ext.make_llm` reads it explicitly and constructs `genai.Client(api_key=...)` itself, bypassing AgentDojo's own Google provider wiring, which defaults to Vertex AI (GCP project + `gcloud auth application-default login`) instead of a plain API key.
 
 **Interbolt source toggle** (`pyproject.toml`):
 
@@ -36,7 +36,7 @@ Requires Python 3.12+ (see `pyproject.toml`).
 
 ## Design choices
 
-**Model registry patching.** AgentDojo's `ModelsEnum` is a `StrEnum` and tops out around Claude 3.7 -- it can't be extended at runtime, and forking AgentDojo to patch it would mean carrying patches against every future AgentDojo version instead of pinning a SHA. Instead, `models_ext.make_llm(model_string)` constructs the provider client (`AnthropicLLM`) directly and passes the resulting object as `PipelineConfig(llm=...)`, which AgentDojo already accepts alongside a `ModelsEnum` string (see `AgentPipeline.from_config`'s `isinstance(config.llm, str)` branch). AgentDojo stays unmodified and pinnable; new model ids are a one-line addition to our own adapter, not a patch to theirs.
+**Model registry patching.** AgentDojo's `ModelsEnum` is a `StrEnum` and tops out around Claude 3.7 -- it can't be extended at runtime, and forking AgentDojo to patch it would mean carrying patches against every future AgentDojo version instead of pinning a SHA. Instead, `models_ext.make_llm(model_string)` constructs the provider client (`AnthropicLLM` or `GoogleLLM`) directly and passes the resulting object as `PipelineConfig(llm=...)`, which AgentDojo already accepts alongside a `ModelsEnum` string (see `AgentPipeline.from_config`'s `isinstance(config.llm, str)` branch). AgentDojo stays unmodified and pinnable; new model ids are a one-line addition to our own adapter, not a patch to theirs. The same bypass also overrides AgentDojo's default *auth mode* for a provider, not just unknown ids: `gemini-1.5-flash-001` is already `ModelsEnum`-known (but not served anymore), but AgentDojo's own `get_llm()` wires Google models to Vertex AI, so `run_benchmark._resolve_model` forces every `gemini-` id through `make_llm` regardless of enum membership to get a `GOOGLE_API_KEY`-based client instead.
 
 **Block message constant.** A blocked or denied tool call always returns the exact string `"Blocked by security policy."` as its error -- never the matched rule name or CEL condition text. That detail is model-visible context; leaking it hands an attacker free information about exactly which policy edge to route around next. Every decision's full detail (rule, condition, contributing labels) still reaches the reporter's `interbolt_events.jsonl` -- it's just never echoed back into the transcript the model reads.
 

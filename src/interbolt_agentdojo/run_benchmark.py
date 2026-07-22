@@ -18,6 +18,7 @@ import argparse
 import time
 from pathlib import Path
 
+from agentdojo.agent_pipeline.base_pipeline_element import BasePipelineElement
 from agentdojo.benchmark import benchmark_suite_with_injections, benchmark_suite_without_injections
 from agentdojo.logging import OutputLogger
 from agentdojo.models import ModelsEnum
@@ -53,7 +54,11 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _resolve_model(model: str) -> str:
+def _resolve_model(model: str) -> str | BasePipelineElement:
+    if model.startswith("gemini-"):
+        # Already ModelsEnum-known, but AgentDojo's own wiring for it hardcodes
+        # Vertex AI auth -- force the API-key bypass regardless (see models_ext.py).
+        return make_llm(model)
     try:
         ModelsEnum(model)
         return model
@@ -76,7 +81,7 @@ def _print_summary(results, has_attack: bool) -> None:
 
 def _run_once(args: argparse.Namespace, repeat_dir: Path) -> None:
     suite = get_suite(args.benchmark_version, args.suite)
-    model: str = _resolve_model(args.model)
+    model: str | BasePipelineElement = _resolve_model(args.model)
 
     if args.policy:
         mode = args.mode or "enforce"
