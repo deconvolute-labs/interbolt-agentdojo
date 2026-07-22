@@ -777,6 +777,7 @@ source = { editable = "." }
 dependencies = [
     { name = "agentdojo" },
     { name = "anthropic" },
+    { name = "google-genai" },
     { name = "interbolt" },
     { name = "pyyaml" },
 ]
@@ -790,6 +791,7 @@ dev = [
 requires-dist = [
     { name = "agentdojo", editable = "../agentdojo" },
     { name = "anthropic" },
+    { name = "google-genai" },
     { name = "interbolt", editable = "../interbolt" },
     { name = "pyyaml" },
 ]

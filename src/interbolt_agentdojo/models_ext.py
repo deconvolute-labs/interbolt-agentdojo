@@ -9,6 +9,16 @@ client ourselves and bypasses the enum entirely. This keeps AgentDojo
 pinnable and unmodified; see the README's "Design choice: model registry
 patching" section.
 
+Gemini ids are a second, different reason to bypass: `gemini-1.5-flash-001`
+and friends are already `ModelsEnum` members, so the enum isn't the problem
+-- but AgentDojo's own `get_llm()` "google" branch hardcodes Vertex AI auth
+(`GCP_PROJECT`/`GCP_LOCATION` + `gcloud auth application-default login`)
+instead of a plain API key. `GoogleLLM` itself accepts any `genai.Client`,
+so `make_llm` builds one with `api_key=os.getenv("GOOGLE_API_KEY")` (Gemini
+Developer API / AI Studio) and the caller (`run_benchmark._resolve_model`)
+routes every `gemini-` id here unconditionally, regardless of `ModelsEnum`
+membership, to skip AgentDojo's Vertex wiring entirely.
+
 `MODEL_NAMES` (`agentdojo.models`) is a different kind of extension point:
 a plain module-level `dict`, not tied to the enum, that some attacks (e.g.
 `important_instructions`) read at call time via
@@ -20,16 +30,24 @@ calls for, applied where it's actually mutable.
 
 from __future__ import annotations
 
+import os
+
 import anthropic
 from agentdojo.agent_pipeline.base_pipeline_element import BasePipelineElement
 from agentdojo.agent_pipeline.llms.anthropic_llm import AnthropicLLM
+from agentdojo.agent_pipeline.llms.google_llm import GoogleLLM
 from agentdojo.models import MODEL_NAMES
+from google import genai
 
 
 def make_llm(model: str) -> BasePipelineElement:
-    """Construct an LLM pipeline element for `model`, bypassing `ModelsEnum`."""
-    MODEL_NAMES.setdefault(model, "Claude")
-    llm = AnthropicLLM(anthropic.Anthropic(), model)
+    """Construct an LLM pipeline element for `model`, bypassing `ModelsEnum`'s provider wiring."""
+    if model.startswith("gemini-"):
+        MODEL_NAMES.setdefault(model, "Gemini")
+        llm = GoogleLLM(model, genai.Client(api_key=os.getenv("GOOGLE_API_KEY")))
+    else:
+        MODEL_NAMES.setdefault(model, "Claude")
+        llm = AnthropicLLM(anthropic.Anthropic(), model)
     llm.name = model
     return llm
 

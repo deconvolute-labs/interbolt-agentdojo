@@ -8,6 +8,7 @@ dependencies = [
     "agentdojo",
     "interbolt",
     "anthropic",
+    "google-genai",
     "pyyaml",
 ]
 
