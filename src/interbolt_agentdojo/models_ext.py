@@ -9,7 +9,7 @@ client ourselves and bypasses the enum entirely. This keeps AgentDojo
 pinnable and unmodified; see the README's "Design choice: model registry
 patching" section.
 
-Gemini ids are a second, different reason to bypass: `gemini-1.5-flash-001`
+Gemini ids are a second, different reason to bypass: Gemini flash models
 and friends are already `ModelsEnum` members, so the enum isn't the problem
 -- but AgentDojo's own `get_llm()` "google" branch hardcodes Vertex AI auth
 (`GCP_PROJECT`/`GCP_LOCATION` + `gcloud auth application-default login`)
