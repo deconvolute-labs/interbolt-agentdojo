@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import collections
 import json
 import time
 from pathlib import Path
@@ -21,6 +22,7 @@ from interbolt.models.protocols import Reporter
 from interbolt.utils import current_run_id
 
 from interbolt_agentdojo.executor import AGENT_ID, InterboltToolsExecutor
+from interbolt_agentdojo.progress import format_duration, get_logger
 
 
 def build_plain_pipeline(model: str | BasePipelineElement, suite: TaskSuite) -> AgentPipeline:
@@ -107,3 +109,88 @@ class RunScopedPipeline(BasePipelineElement):
             result = self.inner.query(query, runtime, env, messages, extra_args)
             Logger().get().log(result[3])
             return result
+
+
+class ProgressLoggingPipeline(BasePipelineElement):
+    """Wraps a pipeline to print console progress while a benchmark run is in flight.
+
+    AgentDojo's own per-task loop lives in the `agentdojo` package, not here, so
+    there's no clean in-process hook for "a task just finished" without patching
+    that dependency. Instead this reads the trace JSON files `TraceLogger`
+    already writes to `repeat_dir` as a normal side effect -- one appears
+    shortly after each (user_task, injection_task) case completes, strictly
+    before the next case's first `query()` call, since AgentDojo's loop is
+    sequential. Scanning for new files on every `query()` call (plus a final
+    `flush()`) is enough to report each finished task without touching
+    AgentDojo internals.
+    """
+
+    def __init__(self, inner: BasePipelineElement, repeat_dir: Path, total: int) -> None:
+        self.inner = inner
+        # AgentDojo's benchmark loop reads `agent_pipeline.name` off the
+        # outermost element to route trace logging (same reason RunScopedPipeline
+        # propagates it above).
+        self.name = inner.name
+        self.repeat_dir = repeat_dir
+        self.total = total
+        self.start = time.monotonic()
+        self.request_count = 0
+        self.recent: collections.deque[str] = collections.deque(maxlen=10)
+        self.seen: set[Path] = set()
+
+        if self.repeat_dir.exists():
+            already_done = sorted(self.repeat_dir.rglob("*.json"), key=lambda p: p.stat().st_mtime)
+            if already_done:
+                self.seen.update(already_done)
+                get_logger().info(f"resuming: {len(already_done)}/{self.total} tasks already recorded")
+
+    def _scan_for_new_results(self) -> None:
+        if not self.repeat_dir.exists():
+            return
+        logger = get_logger()
+        for f in sorted(self.repeat_dir.rglob("*.json"), key=lambda p: p.stat().st_mtime):
+            if f in self.seen:
+                continue
+            self.seen.add(f)
+            try:
+                record = json.loads(f.read_text())
+            except (OSError, json.JSONDecodeError):
+                continue
+
+            if record.get("error"):
+                label = "ERROR"
+            elif record.get("utility"):
+                label = "PASS"
+            else:
+                label = "FAIL"
+            self.recent.append(label)
+
+            done = len(self.seen)
+            elapsed = time.monotonic() - self.start
+            eta = elapsed * (self.total - done) / done if done and done < self.total else 0
+            task_desc = record.get("user_task_id", "?")
+            injection_id = record.get("injection_task_id")
+            if injection_id:
+                task_desc += f" x {injection_id}"
+            logger.info(
+                f"[{done}/{self.total}] {task_desc} -> {label} "
+                f"(elapsed {format_duration(elapsed)}, eta {format_duration(eta)}) "
+                f"recent: {' '.join(self.recent)}"
+            )
+
+    def flush(self) -> None:
+        self._scan_for_new_results()
+
+    def query(
+        self,
+        query: str,
+        runtime: FunctionsRuntime,
+        env: Env = EmptyEnv(),
+        messages: list[ChatMessage] = [],
+        extra_args: dict = {},
+    ):
+        self._scan_for_new_results()
+        self.request_count += 1
+        elapsed = time.monotonic() - self.start
+        get_logger().info(f"request #{self.request_count} (elapsed {format_duration(elapsed)})")
+        return self.inner.query(query, runtime, env, messages, extra_args)

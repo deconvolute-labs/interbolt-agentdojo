@@ -24,9 +24,15 @@ from agentdojo.models import ModelsEnum
 from agentdojo.task_suite.load_suites import get_suite
 from interbolt import JsonlReporter
 
+from interbolt_agentdojo import progress
 from interbolt_agentdojo.manifest import write_manifest
 from interbolt_agentdojo.models_ext import make_llm
-from interbolt_agentdojo.pipeline import RunScopedPipeline, build_interbolt_pipeline, build_plain_pipeline
+from interbolt_agentdojo.pipeline import (
+    ProgressLoggingPipeline,
+    RunScopedPipeline,
+    build_interbolt_pipeline,
+    build_plain_pipeline,
+)
 
 DEFAULT_BENCHMARK_VERSION = "v1.2.2"
 
@@ -88,19 +94,27 @@ def _run_once(args: argparse.Namespace, repeat_dir: Path) -> None:
     else:
         pipeline = build_plain_pipeline(model, suite)
 
+    attack = None
+    if args.attack:
+        import agentdojo.attacks  # noqa: F401  (import registers attacks)
+        from agentdojo.attacks.attack_registry import load_attack
+
+        attack = load_attack(args.attack, suite, pipeline)
+        total = progress.count_tasks_with_injections(suite, args, attack)
+    else:
+        total = progress.count_tasks_without_injections(suite, args)
+
+    tracked_pipeline = ProgressLoggingPipeline(pipeline, repeat_dir, total)
+
     args.run_started_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     # AgentDojo's benchmark functions log through the ambient `Logger` stack
     # (see agentdojo.logging.Logger.get()); their own CLI (scripts/benchmark.py)
     # always wraps the call in `OutputLogger`, which is where `logdir` actually
     # gets attached -- without it, `TraceLogger` has no `.logdir` to write to.
     with OutputLogger(str(repeat_dir)):
-        if args.attack:
-            import agentdojo.attacks  # noqa: F401  (import registers attacks)
-            from agentdojo.attacks.attack_registry import load_attack
-
-            attack = load_attack(args.attack, suite, pipeline)
+        if attack is not None:
             results = benchmark_suite_with_injections(
-                pipeline,
+                tracked_pipeline,
                 suite,
                 attack,
                 repeat_dir,
@@ -111,13 +125,14 @@ def _run_once(args: argparse.Namespace, repeat_dir: Path) -> None:
             )
         else:
             results = benchmark_suite_without_injections(
-                pipeline,
+                tracked_pipeline,
                 suite,
                 repeat_dir,
                 args.force_rerun,
                 user_tasks=args.user_tasks,
                 benchmark_version=args.benchmark_version,
             )
+    tracked_pipeline.flush()
     args.run_finished_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
     manifest_path = write_manifest(repeat_dir, args)
@@ -127,6 +142,8 @@ def _run_once(args: argparse.Namespace, repeat_dir: Path) -> None:
 
 def run(args: argparse.Namespace) -> None:
     for i in range(args.repeats):
+        if args.repeats > 1:
+            progress.get_logger().info(f"=== repeat {i + 1}/{args.repeats} ===")
         _run_once(args, args.logdir / f"repeat_{i}")
 
 
