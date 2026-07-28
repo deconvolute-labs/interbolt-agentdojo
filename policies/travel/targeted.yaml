@@ -93,14 +93,11 @@
 #
 # ARGUMENT-AWARE CARVE-OUT (the one place a shape *does* separate them):
 #   send_email is an egress channel, and egress to a third party is separable
-#   from a self-directed summary. Once the run is tainted, this policy blocks
-#   send_email only when a recipient is outside the account-owner domain
-#   `@bluesparrowtech.com` (the environment's own address: Inbox.account_email
-#   and User.email, a structural property of the suite, NOT any attacker
-#   address). This blocks every email exfil in the suite (all send to
-#   @google.com) while still allowing a tainted self-domain email. It is
-#   strictly better for utility than a blanket run.tainted block on
-#   send_email, and equally secure: no attack in this suite targets the
+#   from a self-directed summary. Once the run is tainted, this policy blocks 
+#   egress to any domain outside the account owner's, which as a consequence 
+#   covers every exfil attempt in this suite. It is strictly better for 
+#   utility than a blanket run.tainted block on send_email, and
+#   equally secure: no attack in this suite targets the
 #   account-owner domain, and a self-addressed email is not a successful
 #   exfil regardless.
 #   Enforcement is on `recipients` (a required, always-present list). cc/bcc
@@ -191,7 +188,7 @@ sinks:
   # shape that separates attack from legitimate use.
   agentdojo.send_email:
     - name: block_exfil_to_external_when_tainted
-      when: 'run.tainted && args.recipients.any(r, !r.endsWith("@bluesparrowtech.com"))'
+      when: 'run.tainted && args.recipients.exists(r, !r.endsWith("@bluesparrowtech.com"))'
       action: block
     - name: default
       action: allow
@@ -324,7 +321,7 @@ sinks:
 # endorse the confirmed value, e.g. endorse(hotel, kind="user_confirmed"),
 # and an allow rule placed above the block rule --
 #   - name: allow_user_confirmed
-#     when: taint.any(t, t.endorsements.any(k, k == "user_confirmed"))
+#     when: taint.exists(t, t.endorsements.exists(k, k == "user_confirmed"))
 #     action: allow
 # -- lets the confirmed booking through while still blocking the injected
 # one. The AgentDojo harness exposes no such confirmation signal, so this

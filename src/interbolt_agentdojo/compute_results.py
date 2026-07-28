@@ -348,12 +348,15 @@ def _quartet_repeat_metrics(
     events_d = _interbolt_event_summary(asr_system_dir)
     events_c = _interbolt_event_summary(utility_dir)
 
+    if (metrics_utility["manifest"].get("defense") or {}).get("policy_sha256") != (manifest_d.get("defense") or {}).get("policy_sha256"):
+        print("  ** WARNING: utility (C) and asr-system (D) used different policies **")
+        
     manifests = [metrics_ceiling["manifest"], manifest_b, metrics_utility["manifest"], manifest_d]
-    for key in ("suite", "benchmark_version", "model"):
+    for key in ("suite", "benchmark_version", "model", "user_tasks", "injection_tasks"):
         values = {m.get(key) for m in manifests}
         if len(values) > 1:
             print(f"  ** WARNING: quartet runs disagree on {key!r}: {values} **")
-
+    
     suite = get_suite(manifest_b["benchmark_version"], manifest_b["suite"])
     case_to_run_b = _case_to_run_id(asr_model_dir, with_injections_b)
     case_to_run_d = _case_to_run_id(asr_system_dir, with_injections_d)

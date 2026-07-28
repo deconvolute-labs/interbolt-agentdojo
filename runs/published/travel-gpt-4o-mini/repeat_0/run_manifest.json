@@ -1,0 +1,44 @@
+{
+  "command": [
+    "/Users/David/Repositories/deconvoluteai-project/interbolt-agentdojo/src/interbolt_agentdojo/run_benchmark.py",
+    "--suite",
+    "travel",
+    "--model",
+    "gpt-4o-mini-2024-07-18",
+    "--policy",
+    "policies/travel/strict.yaml",
+    "--mode",
+    "enforce",
+    "--logdir",
+    "runs/travel/C_utility_strict"
+  ],
+  "run_started_at": "2026-07-28T13:02:48Z",
+  "run_finished_at": "2026-07-28T13:06:38Z",
+  "suite": "travel",
+  "benchmark_version": "v1.2.2",
+  "model": "gpt-4o-mini-2024-07-18",
+  "attack": null,
+  "user_tasks": null,
+  "injection_tasks": null,
+  "repeats": 1,
+  "defense": {
+    "name": "interbolt",
+    "mode": "enforce",
+    "policy_file": "policies/travel/strict.yaml",
+    "policy_sha256": "7d684c58d22dcccdf47b0a56d082d40e303ead568dbba01f9fcd83ea6fb6fc30"
+  },
+  "interbolt": {
+    "version": "0.2.0",
+    "install_mode": "package",
+    "commit": null,
+    "dirty": null
+  },
+  "agentdojo": {
+    "version": "0.1.35",
+    "install_mode": "editable",
+    "commit": "089ed468cf3ed0322acc66b0211f26d9d90dbf60",
+    "dirty": true
+  },
+  "python_version": "3.12.12",
+  "platform": "macOS-26.5.2-arm64-arm-64bit"
+}

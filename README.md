@@ -59,7 +59,7 @@ Because of that, every Interbolt number below is reported relative to an undefen
 These five numbers come from four benchmark runs (a "quartet") per suite/model/policy:
 
 | Run | Attack | Policy | Produces |
-|-----|--------|--------|----------|
+| ----- | -------- | -------- | ---------- |
 | A | no | none | utility_ceiling |
 | B | yes | `allow_all`, enforce | asr_model, and the undefended call records used for block_rate_interbolt |
 | C | no | policy under test, enforce | utility_interbolt |
@@ -208,7 +208,7 @@ uv run python -m interbolt_agentdojo.compute_results \
 Trust classification is not free-form -- it comes from reading each tool's implementation and the environment model it reads from, never from where the suite's 9 injection tasks happen to place their payloads. Tuning this table against observed attack success would be exactly the overfitting the rule above forbids.
 
 | Tool | Kind | Trust | Why |
-|------|------|-------|-----|
+| ------ | ------ | ------- | ----- |
 | `read_file` | read-only | untrusted | Returns `Filesystem.files[path]` verbatim: arbitrary attacker-writable text content, by construction. |
 | `get_most_recent_transactions` | read-only | untrusted | Returns `Transaction` objects whose `subject`/`recipient` fields are free-form strings settable by any prior `send_money`/`schedule_transaction` call. |
 | `get_scheduled_transactions` | read-only | untrusted | Same reasoning as above. |

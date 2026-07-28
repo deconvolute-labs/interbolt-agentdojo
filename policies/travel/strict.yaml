@@ -11,8 +11,7 @@
 # METHODOLOGY. Same rule as targeted and banking: trust classification and
 # gating are derived from the tool implementations and the data model, read
 # from the same files (travel_booking_client.py, calendar_client.py,
-# email_client.py, environment.yaml, injection_vectors.yaml), not tuned
-# against which injection tasks succeed.
+# email_client.py, environment.yaml, injection_vectors.yaml).
 #
 # TRUST MODEL (trust nothing). All 28 tool returns are classified untrusted.
 # This is the one deliberate divergence in the source table from targeted,
@@ -47,10 +46,7 @@
 #      does: strict blocks that act, targeted allows it.
 #   2. No legitimate task sends an email to the account-owner domain during a
 #      tainted run, so targeted's self-domain carve-out is never exercised by
-#      a scored task. It changes no attack outcome either, since every email
-#      exfil in the suite targets an external (@google.com) recipient that
-#      both policies block. The carve-out would only diverge on a tainted
-#      self-domain send, which strict refuses and targeted permits.
+#      a scored task.
 # The refinements in targeted are still the right default for a real
 # deployment and are likely to separate from strict on suites whose tasks act
 # on catalog-only data or send self-directed mail; they simply do not on this

@@ -30,4 +30,146 @@ version: "1.0"
 defaults:
   sink_action: allow
 
-sinks: {}
+sources:
+  - name: "tool:get_rating_reviews_for_hotels"
+    trust: trusted
+  - name: "tool:get_rating_reviews_for_restaurants"
+    trust: trusted
+  - name: "tool:get_rating_reviews_for_car_rental"
+    trust: trusted
+  - name: "tool:get_day_calendar_events"
+    trust: trusted
+  - name: "tool:search_calendar_events"
+    trust: trusted
+  - name: "tool:send_email"
+    trust: trusted
+  - name: "tool:reserve_hotel"
+    trust: trusted
+  - name: "tool:reserve_restaurant"
+    trust: trusted
+  - name: "tool:reserve_car_rental"
+    trust: trusted
+  - name: "tool:create_calendar_event"
+    trust: trusted
+  - name: "tool:cancel_calendar_event"
+    trust: trusted
+  - name: "tool:get_user_information"
+    trust: trusted
+  - name: "tool:get_all_hotels_in_city"
+    trust: trusted
+  - name: "tool:get_hotels_prices"
+    trust: trusted
+  - name: "tool:get_hotels_address"
+    trust: trusted
+  - name: "tool:get_all_restaurants_in_city"
+    trust: trusted
+  - name: "tool:get_cuisine_type_for_restaurants"
+    trust: trusted
+  - name: "tool:get_restaurants_address"
+    trust: trusted
+  - name: "tool:get_dietary_restrictions_for_all_restaurants"
+    trust: trusted
+  - name: "tool:get_contact_information_for_restaurants"
+    trust: trusted
+  - name: "tool:get_price_for_restaurants"
+    trust: trusted
+  - name: "tool:check_restaurant_opening_hours"
+    trust: trusted
+  - name: "tool:get_all_car_rental_companies_in_city"
+    trust: trusted
+  - name: "tool:get_car_types_available"
+    trust: trusted
+  - name: "tool:get_car_fuel_options"
+    trust: trusted
+  - name: "tool:get_car_rental_address"
+    trust: trusted
+  - name: "tool:get_car_price_per_day"
+    trust: trusted
+  - name: "tool:get_flight_information"
+    trust: trusted
+
+sinks:
+  agentdojo.send_email:
+    - name: default
+      action: allow
+  agentdojo.reserve_hotel:
+    - name: default
+      action: allow
+  agentdojo.reserve_restaurant:
+    - name: default
+      action: allow
+  agentdojo.reserve_car_rental:
+    - name: default
+      action: allow
+  agentdojo.create_calendar_event:
+    - name: default
+      action: allow
+  agentdojo.cancel_calendar_event:
+    - name: default
+      action: allow
+  agentdojo.get_user_information:
+    - name: default
+      action: allow
+  agentdojo.get_all_hotels_in_city:
+    - name: default
+      action: allow
+  agentdojo.get_hotels_prices:
+    - name: default
+      action: allow
+  agentdojo.get_hotels_address:
+    - name: default
+      action: allow
+  agentdojo.get_rating_reviews_for_hotels:
+    - name: default
+      action: allow
+  agentdojo.get_all_restaurants_in_city:
+    - name: default
+      action: allow
+  agentdojo.get_cuisine_type_for_restaurants:
+    - name: default
+      action: allow
+  agentdojo.get_restaurants_address:
+    - name: default
+      action: allow
+  agentdojo.get_rating_reviews_for_restaurants:
+    - name: default
+      action: allow
+  agentdojo.get_dietary_restrictions_for_all_restaurants:
+    - name: default
+      action: allow
+  agentdojo.get_contact_information_for_restaurants:
+    - name: default
+      action: allow
+  agentdojo.get_price_for_restaurants:
+    - name: default
+      action: allow
+  agentdojo.check_restaurant_opening_hours:
+    - name: default
+      action: allow
+  agentdojo.get_all_car_rental_companies_in_city:
+    - name: default
+      action: allow
+  agentdojo.get_car_types_available:
+    - name: default
+      action: allow
+  agentdojo.get_rating_reviews_for_car_rental:
+    - name: default
+      action: allow
+  agentdojo.get_car_fuel_options:
+    - name: default
+      action: allow
+  agentdojo.get_car_rental_address:
+    - name: default
+      action: allow
+  agentdojo.get_car_price_per_day:
+    - name: default
+      action: allow
+  agentdojo.get_day_calendar_events:
+    - name: default
+      action: allow
+  agentdojo.search_calendar_events:
+    - name: default
+      action: allow
+  agentdojo.get_flight_information:
+    - name: default
+      action: allow

@@ -738,36 +738,17 @@ wheels = [
 
 [[package]]
 name = "interbolt"
-source = { editable = "../interbolt" }
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cel-python" },
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "rich" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "cel-python" },
-    { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.20" },
-    { name = "pydantic" },
-    { name = "pyyaml" },
-    { name = "rich" },
-]
-provides-extras = ["otel"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "git-cliff", specifier = ">=2.13.1" },
-    { name = "mypy" },
-    { name = "opentelemetry-sdk" },
-    { name = "pre-commit" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "pytest-mock" },
-    { name = "ruff" },
-    { name = "types-pyyaml" },
+sdist = { url = "https://files.pythonhosted.org/packages/95/1a/8f5aa2369f95f3d748d3f4e466e72faf9ec8fe7163a44b1dc7e963129a94/interbolt-0.2.0.tar.gz", hash = "sha256:b81390b62f19acac8d54665752dfe9d54b6211487ef3be96909384de906353f9", size = 199901, upload-time = "2026-07-26T12:56:38.523Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a1/f4/f878dbd6d78c3b1309cdfbb8fd01b60431d2a1c6c64894cc75bd6cde6153/interbolt-0.2.0-py3-none-any.whl", hash = "sha256:d621bdad38a0927a7da72b8d5a9e1b124c2ac599b2f350e79876c98ea9913c22", size = 105296, upload-time = "2026-07-26T12:56:36.894Z" },
 ]
 
 [[package]]
@@ -793,7 +774,7 @@ requires-dist = [
     { name = "agentdojo", editable = "../agentdojo" },
     { name = "anthropic" },
     { name = "google-genai" },
-    { name = "interbolt", editable = "../interbolt" },
+    { name = "interbolt", specifier = "==0.2.0" },
     { name = "openai" },
     { name = "pyyaml" },
 ]
