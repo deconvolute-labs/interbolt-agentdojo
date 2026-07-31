@@ -9,7 +9,7 @@ resolution-markers = [
 [[package]]
 name = "agentdojo"
 version = "0.1.35"
-source = { editable = "../agentdojo" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anthropic" },
     { name = "click" },
@@ -26,45 +26,9 @@ dependencies = [
     { name = "tenacity" },
     { name = "typing-extensions" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "anthropic", specifier = ">=0.47.0" },
-    { name = "click", specifier = ">=8.1.7" },
-    { name = "cohere", specifier = ">=5.3.4" },
-    { name = "deepdiff", specifier = ">=8.6.1" },
-    { name = "docstring-parser", specifier = ">=0.15" },
-    { name = "google-genai", specifier = ">=1.15.0" },
-    { name = "langchain", specifier = ">=0.1.17" },
-    { name = "openai", specifier = ">=1.59.7" },
-    { name = "pydantic", extras = ["email"], specifier = ">=2.7.1" },
-    { name = "python-dotenv", specifier = ">=1.0.1" },
-    { name = "pyyaml", specifier = ">=6.0.1" },
-    { name = "rich", specifier = ">=13.7.1" },
-    { name = "tenacity", specifier = ">=8.2.3" },
-    { name = "torch", marker = "extra == 'transformers'", specifier = ">=2.2.1" },
-    { name = "transformers", marker = "extra == 'transformers'", specifier = ">=4.41.2" },
-    { name = "typing-extensions", specifier = ">=4.11.0" },
-]
-provides-extras = ["transformers"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "jupyterlab", specifier = ">=4.1.2" },
-    { name = "mypy", specifier = ">=1.8.0" },
-    { name = "pyright", specifier = ">=1.1.362" },
-    { name = "pytest", specifier = ">=8.0.2" },
-    { name = "python-dotenv", specifier = ">=1.0.1" },
-    { name = "ruff", specifier = ">=0.3.0" },
-    { name = "seaborn", specifier = ">=0.13.2" },
-    { name = "statsmodels", specifier = ">=0.14.2" },
-    { name = "tiktoken", specifier = ">=0.7.0" },
-    { name = "types-pyyaml", specifier = ">=6.0.12.20240311" },
-]
-docs = [
-    { name = "black", specifier = ">=24.4.2" },
-    { name = "mkdocs-material", specifier = ">=9.5.26" },
-    { name = "mkdocstrings", extras = ["python"], specifier = ">=0.25.1" },
+sdist = { url = "https://files.pythonhosted.org/packages/8a/dc/2cc783d46c73297c15127d3b7971d7ba7b5cb782bf36a8b240079f7df61d/agentdojo-0.1.35.tar.gz", hash = "sha256:9eacbc89d996f8656b235ad7b626bcf840b1ace7101174ca62d790c7c6d62956", size = 720411, upload-time = "2025-10-27T18:11:06.097Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ca/a0/371be72fdd08bbae0c3c5cd22e6b35390f35c9cbe189d14b72e49058bd4b/agentdojo-0.1.35-py3-none-any.whl", hash = "sha256:364bea4219716b716bf639f504d195943f7f6a5535d312ca41d7098704a2affd", size = 192363, upload-time = "2025-10-27T18:11:04.815Z" },
 ]
 
 [[package]]
@@ -771,7 +735,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "agentdojo", editable = "../agentdojo" },
+    { name = "agentdojo", specifier = "==0.1.35" },
     { name = "anthropic" },
     { name = "google-genai" },
     { name = "interbolt", specifier = "==0.2.0" },

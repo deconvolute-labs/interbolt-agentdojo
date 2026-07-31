@@ -82,7 +82,13 @@ class RunScopedPipeline(BasePipelineElement):
         # propagating it, TraceLogger silently can't save any trace JSON.
         self.name = inner.name
         self.run_index_path = run_index_path
-        self._seq = 0
+        self._seq = self._existing_row_count()
+
+    def _existing_row_count(self) -> int:
+        if not self.run_index_path.exists():
+            return 0
+        with self.run_index_path.open() as f:
+            return sum(1 for line in f if line.strip())
 
     def query(
         self,
@@ -112,11 +118,26 @@ class RunScopedPipeline(BasePipelineElement):
                     )
                     + "\n"
                 )
+                
             self._seq += 1
-            result = self.inner.query(query, runtime, env, messages, extra_args)
+            status, error = "ok", None
+            
+            try:
+                result = self.inner.query(query, runtime, env, messages, extra_args)
+            except BaseException as e:
+                status, error = "error", f"{type(e).__name__}: {e}"
+                raise
+            finally:
+                with (self.run_index_path.parent / "run_outcomes.jsonl").open("a") as f:
+                    f.write(json.dumps({
+                        "run_id": run_id,
+                        "status": status,
+                        "error": error,
+                        "finished_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    }) + "\n")
+
             Logger().get().log(result[3])
             return result
-
 
 class ProgressLoggingPipeline(BasePipelineElement):
     """Wraps a pipeline to print console progress while a benchmark run is in flight.

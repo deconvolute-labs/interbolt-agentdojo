@@ -5,7 +5,7 @@ description = "Benchmarks of Interbolt on AgentDojo."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "agentdojo",
+    "agentdojo==0.1.35",
     "interbolt==0.2.0",
     "anthropic",
     "google-genai",
@@ -27,7 +27,7 @@ dev = ["pytest"]
 # produced with the pinned state (see run_manifest.json's `interbolt.install_mode`).
 [tool.uv.sources]
 # interbolt = { path = "../interbolt", editable = true }
-agentdojo = { path = "../agentdojo", editable = true }
+# agentdojo = { path = "../agentdojo", editable = true }
 
 # Pinned agentdojo, for reference (published runs should switch to this form):
 # agentdojo = { git = "https://github.com/ethz-spylab/agentdojo", rev = "089ed468cf3ed0322acc66b0211f26d9d90dbf60" }
