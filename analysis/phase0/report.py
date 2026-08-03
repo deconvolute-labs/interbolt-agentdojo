@@ -12,6 +12,7 @@ import platform
 import sys
 from pathlib import Path
 
+from analysis.common.artifacts import suite_scoped_dir
 from analysis.common.discovery import find_run_records
 from analysis.phase0.anomalies import render_anomalies_section
 from analysis.phase0.inventory import render_file_type_samples, render_tree_section
@@ -34,13 +35,20 @@ def _render_run_metadata(results_root: Path, policies_root: Path, n_records: int
     return "\n".join(lines)
 
 
-def build_manifest(results_root: Path, policies_root: Path, repo_root: Path) -> str:
+def build_manifest(results_root: Path, policies_root: Path, repo_root: Path, example_suite: str | None = None) -> str:
     """`results_root`/`policies_root` are expected relative to `repo_root` (the cwd);
     kept as given so paths rendered into the manifest match what a reader would
     type at the repo root, rather than being silently rewritten absolute/relative.
+
+    `example_suite` picks which suite's runs are sampled as worked examples in
+    §2 and §3; defaults to the first suite (alphabetically) found in `results_root`,
+    which is `banking` today -- so omitting it reproduces today's report exactly.
     """
     records = find_run_records(results_root, policies_root)
-    summary_csv = results_root / "AgentDojo-Interbolt-Benchmark.csv"
+    summary_csvs = {
+        suite: suite_scoped_dir(results_root, suite) / "results.csv" for suite in sorted({r.suite for r in records})
+    }
+    example_suite = example_suite or sorted({r.suite for r in records})[0]
 
     sections = [
         "# Artifact manifest",
@@ -56,22 +64,24 @@ def build_manifest(results_root: Path, policies_root: Path, repo_root: Path) -> 
         "",
         render_tree_section(results_root, max_depth=4),
         "",
-        render_file_type_samples(records, policies_root, summary_csv),
+        render_file_type_samples(records, policies_root, summary_csvs, example_suite),
         "",
-        render_join_key_matrix(records, repo_root),
+        render_join_key_matrix(records, repo_root, example_suite),
         "",
         render_scoring_source_section(records),
         "",
         render_pipeline_locate_section(repo_root),
         "",
-        render_anomalies_section(records, results_root, repo_root),
+        render_anomalies_section(records, results_root, repo_root, summary_csvs),
         "",
     ]
     return "\n".join(sections) + "\n"
 
 
-def write_manifest(results_root: Path, policies_root: Path, repo_root: Path, out_path: Path) -> Path:
-    content = build_manifest(results_root, policies_root, repo_root)
+def write_manifest(
+    results_root: Path, policies_root: Path, repo_root: Path, out_path: Path, example_suite: str | None = None
+) -> Path:
+    content = build_manifest(results_root, policies_root, repo_root, example_suite)
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(content)

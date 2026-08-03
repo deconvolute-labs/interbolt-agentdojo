@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import sys
 from pathlib import Path
@@ -15,8 +16,14 @@ from interbolt_agentdojo.compute_results import (
     _classify_case,
     _five_numbers,
     _interbolt_blocked_target_sink,
+    _interbolt_event_summary,
+    _policy_declared_block_rules,
+    _quartet_csv_row,
+    _quartet_repeat_metrics,
     _reached_target_sink,
+    _selected_run_ids,
     _target_tools,
+    _write_quartet_csv_rows,
     main,
 )
 
@@ -111,7 +118,13 @@ def test_case_to_run_id_filters_presolve_noise(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def _write_manifest(repeat_dir: Path, defense: dict | None) -> None:
+def _write_manifest(
+    repeat_dir: Path,
+    defense: dict | None,
+    *,
+    interbolt_version: str | None = None,
+    agentdojo_version: str | None = None,
+) -> None:
     repeat_dir.mkdir(parents=True, exist_ok=True)
     manifest = {
         "suite": SUITE,
@@ -119,6 +132,10 @@ def _write_manifest(repeat_dir: Path, defense: dict | None) -> None:
         "model": "test-model",
         "defense": defense,
     }
+    if interbolt_version is not None:
+        manifest["interbolt"] = {"version": interbolt_version}
+    if agentdojo_version is not None:
+        manifest["agentdojo"] = {"version": agentdojo_version}
     (repeat_dir / "run_manifest.json").write_text(json.dumps(manifest))
 
 
@@ -151,9 +168,11 @@ def _append_jsonl(path: Path, records: list[dict]) -> None:
             f.write(json.dumps(record) + "\n")
 
 
-def _build_no_attack_dir(run_dir: Path, defense: dict | None, utilities: dict[str, bool]) -> None:
-    repeat_dir = run_dir / "repeat_0"
-    _write_manifest(repeat_dir, defense)
+def _build_no_attack_dir(
+    run_dir: Path, defense: dict | None, utilities: dict[str, bool], *, repeat: int = 0, **manifest_kwargs
+) -> None:
+    repeat_dir = run_dir / f"repeat_{repeat}"
+    _write_manifest(repeat_dir, defense, **manifest_kwargs)
     for user_task_id, utility in utilities.items():
         _write_result(repeat_dir, user_task_id, "none", None, utility, security=False)
 
@@ -164,10 +183,17 @@ def _build_attacked_dir(
     cases: dict[str, bool],  # user_task_id -> security
     call_records: dict[str, list[dict]] | None = None,  # run_id -> records
     events: dict[str, list[dict]] | None = None,  # run_id -> events
+    *,
+    repeat: int = 0,
+    **manifest_kwargs,
 ) -> dict[str, str]:
     """Builds an attacked (with-injection) run dir; returns user_task_id -> run_id."""
-    repeat_dir = run_dir / "repeat_0"
-    _write_manifest(repeat_dir, defense)
+    repeat_dir = run_dir / f"repeat_{repeat}"
+    _write_manifest(repeat_dir, defense, **manifest_kwargs)
+    # Not repeat-suffixed: each repeat_dir is a separate directory tree, so a
+    # run_id colliding across repeats doesn't cause any cross-talk, and
+    # callers (including existing tests) key call_records/events dicts off
+    # this exact convention.
     run_ids = {user_task_id: f"run-{user_task_id}" for user_task_id in cases}
     run_index_lines = [
         {
@@ -208,6 +234,7 @@ def _build_attacked_dir(
 
 ALLOW_ALL_DEFENSE = {"policy_file": "policies/allow_all.yaml"}
 STRICT_DEFENSE = {"policy_file": "policies/strict.yaml"}
+STRICT_DEFENSE_WITH_HASH = {"policy_file": "policies/strict.yaml", "policy_sha256": "abc123"}
 
 
 def test_five_numbers_happy_path(tmp_path):
@@ -339,6 +366,368 @@ def test_five_numbers_mismatched_repeat_counts_raises(tmp_path):
         _five_numbers(ceiling, asr_model, utility, asr_system, allow_dirty=True)
 
 
+def test_five_numbers_single_repeat_no_breakdown(tmp_path):
+    ceiling = tmp_path / "ceiling"
+    asr_model = tmp_path / "asr_model"
+    utility = tmp_path / "utility"
+    asr_system = tmp_path / "asr_system"
+    _build_no_attack_dir(ceiling, None, {"user_task_0": True})
+    _build_no_attack_dir(utility, STRICT_DEFENSE, {"user_task_0": True})
+    _build_attacked_dir(asr_model, ALLOW_ALL_DEFENSE, cases={"user_task_0": True})
+    _build_attacked_dir(asr_system, STRICT_DEFENSE, cases={"user_task_0": True})
+
+    result = _five_numbers(ceiling, asr_model, utility, asr_system, allow_dirty=True)
+    for key in (
+        "utility_ceiling_by_repeat",
+        "utility_interbolt_by_repeat",
+        "retention_by_repeat",
+        "asr_model_by_repeat",
+        "asr_system_by_repeat",
+        "block_rate_interbolt_by_repeat",
+    ):
+        assert result[key] == ""
+
+
+def test_compute_run_single_repeat_no_breakdown(tmp_path):
+    run_dir = tmp_path / "solo"
+    _build_no_attack_dir(run_dir, None, {"user_task_0": True})
+    result = compute_results.compute_run(run_dir, allow_dirty=True)
+    assert result["benign_utility_by_repeat"] == ""
+    assert result["utility_under_attack_by_repeat"] == ""
+    assert result["asr_by_repeat"] == ""
+
+
+# ---------------------------------------------------------------------------
+# Part B: retry-attempt event filtering (deduplicated block/approval counts)
+# ---------------------------------------------------------------------------
+
+
+def test_selected_run_ids_picks_last_attempt_per_case(tmp_path):
+    # AgentDojo retried this case: two run_index entries share a key, the
+    # second (later seq) is the attempt AgentDojo actually scored.
+    run_index_lines = [
+        {"seq": 0, "run_id": "attempt-1", "user_task_id": "user_task_0", "injection_task_id": "injection_task_1"},
+        {"seq": 1, "run_id": "attempt-2", "user_task_id": "user_task_0", "injection_task_id": "injection_task_1"},
+    ]
+    _append_jsonl(tmp_path / "run_index.jsonl", run_index_lines)
+    with_injections = {("user_task_0", "injection_task_1"): object()}
+
+    assert _selected_run_ids(tmp_path, {}, with_injections) == {"attempt-2"}
+
+
+def test_interbolt_event_summary_excludes_superseded_retry_attempts(tmp_path):
+    _append_jsonl(
+        tmp_path / "interbolt_events.jsonl",
+        [
+            {
+                "outcome": "block",
+                "decision": {"action": "block", "tool": "agentdojo.send_money", "matched_rule": "r1", "run_id": "attempt-1"},
+            },
+            {
+                "outcome": "block",
+                "decision": {"action": "block", "tool": "agentdojo.send_money", "matched_rule": "r1", "run_id": "attempt-2"},
+            },
+        ],
+    )
+
+    unfiltered = _interbolt_event_summary(tmp_path)
+    assert unfiltered["blocks"] == 2  # raw file total, superseded attempt included
+
+    filtered = _interbolt_event_summary(tmp_path, selected_run_ids={"attempt-2"})
+    assert filtered["blocks"] == 1  # only the attempt AgentDojo actually scored
+    assert filtered["blocks_by_rule"] == {"r1": 1}
+
+
+def test_interbolt_event_summary_eval_errors_not_filtered(tmp_path):
+    # eval_errors reflect harness health, not per-case scoring -- an error on
+    # a since-superseded attempt is still evidence the evaluator broke.
+    _append_jsonl(
+        tmp_path / "interbolt_events.jsonl",
+        [
+            {"outcome": "evaluation_error", "decision": {"action": "allow", "tool": "x", "run_id": "attempt-1"}},
+        ],
+    )
+    filtered = _interbolt_event_summary(tmp_path, selected_run_ids={"attempt-2"})
+    assert filtered["eval_errors"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Per-repeat breakdown + CSV export: two repeats, matched by index (never
+# pooled) -- see the taxonomy differing per repeat below.
+# ---------------------------------------------------------------------------
+
+
+_POLICY_YAML_TEMPLATE = """\
+version: "1.0"
+defaults:
+  sink_action: allow
+sources: []
+sinks:
+  agentdojo.send_money:
+    - name: block_when_run_tainted
+      when: run.tainted
+      action: block
+    - name: default
+      action: allow
+  agentdojo.get_balance:
+    - name: block_never_fires
+      when: run.tainted
+      action: block
+    - name: default
+      action: allow
+"""
+
+
+def test_five_numbers_two_repeats_breakdown_and_csv(tmp_path):
+    ceiling = tmp_path / "ceiling"
+    asr_model = tmp_path / "asr_model"
+    utility = tmp_path / "utility"
+    asr_system = tmp_path / "asr_system"
+
+    # A real policy file, not just a manifest label: declares two block
+    # rules, only one of which the events below ever fire. Exercises
+    # zero-seeding (block_never_fires should show 0, not be absent).
+    policy_path = tmp_path / "strict.yaml"
+    policy_path.write_text(_POLICY_YAML_TEMPLATE)
+    defense = {"policy_file": str(policy_path), "policy_sha256": "abc123"}
+
+    for repeat in (0, 1):
+        _build_no_attack_dir(ceiling, None, {"user_task_0": True, "user_task_2": True}, repeat=repeat)
+        _build_no_attack_dir(
+            utility,
+            defense,
+            {"user_task_0": True, "user_task_2": False},
+            repeat=repeat,
+            interbolt_version="0.2.0",
+            agentdojo_version="0.1.35",
+        )
+
+    # Repeat 0: one attacked case, blocked -> block_rate = 1/1.
+    _build_attacked_dir(
+        asr_model,
+        ALLOW_ALL_DEFENSE,
+        cases={"user_task_0": True},
+        call_records={"run-user_task_0": [{"tool": "agentdojo.send_money", "args": {}}]},
+        repeat=0,
+    )
+    _build_attacked_dir(
+        asr_system,
+        defense,
+        cases={"user_task_0": False},
+        events={
+            "run-user_task_0": [
+                {"outcome": "block", "decision": {"tool": "agentdojo.send_money", "matched_rule": "block_when_run_tainted"}}
+            ]
+        },
+        repeat=0,
+        interbolt_version="0.2.0",
+        agentdojo_version="0.1.35",
+    )
+
+    # Repeat 1: two attacked cases, one blocked and one succeeded despite the
+    # policy -> block_rate = 1/2. Different from repeat 0's 1/1 and from the
+    # pooled figure (2/3) -- proves per-repeat pairing, not pooling.
+    _build_attacked_dir(
+        asr_model,
+        ALLOW_ALL_DEFENSE,
+        cases={"user_task_0": True, "user_task_1": True},
+        call_records={
+            "run-user_task_0": [{"tool": "agentdojo.send_money", "args": {}}],
+            "run-user_task_1": [{"tool": "agentdojo.send_money", "args": {}}],
+        },
+        repeat=1,
+    )
+    _build_attacked_dir(
+        asr_system,
+        defense,
+        cases={"user_task_0": False, "user_task_1": True},
+        events={
+            "run-user_task_0": [
+                {"outcome": "block", "decision": {"tool": "agentdojo.send_money", "matched_rule": "block_when_run_tainted"}}
+            ],
+            "run-user_task_1": [{"outcome": "allow", "decision": {"tool": "agentdojo.send_money"}}],
+        },
+        repeat=1,
+        interbolt_version="0.2.0",
+        agentdojo_version="0.1.35",
+    )
+
+    result = _five_numbers(ceiling, asr_model, utility, asr_system, allow_dirty=True)
+
+    assert result["block_rate_interbolt"] == [1.0, 0.5]
+    assert result["block_rate_interbolt_by_repeat"] == "repeat_0=1.00 (n=1), repeat_1=0.50 (n=2)"
+
+    per_repeat = result["per_repeat"]
+    assert len(per_repeat) == 2
+    for r in per_repeat:
+        # block_never_fires is declared (action: block) but never appears in
+        # any event -- zero-seeded, not absent.
+        assert r["blocks_by_rule_attacked"]["block_never_fires"] == 0
+        assert r["blocks_by_rule_benign"]["block_never_fires"] == 0
+
+    rows = [_quartet_csv_row(r, i) for i, r in enumerate(per_repeat)]
+    assert [row["fixed"]["repeat"] for row in rows] == [0, 1]
+    assert [row["fixed"]["n_cases"] for row in rows] == [1, 2]
+    assert [row["fixed"]["bucket_total"] for row in rows] == [1, 2]
+    for row in rows:
+        assert row["fixed"]["deduplicated"] == "yes"
+        assert row["fixed"]["policy"] == "strict"
+        assert row["fixed"]["policy_fingerprint"] == "sha256:abc123"
+        assert row["fixed"]["interbolt_version"] == "0.2.0"
+        assert row["fixed"]["agentdojo_version"] == "0.1.35"
+        # retention isn't derived from the rate itself: it's u_policy_num / u_ceiling_num.
+        assert row["fixed"]["retention_num"] == row["fixed"]["u_policy_num"] == 1
+        assert row["fixed"]["retention_den"] == row["fixed"]["u_ceiling_num"] == 2
+
+    csv_path = tmp_path / "results.csv"
+    _write_quartet_csv_rows(rows, csv_path)
+    with csv_path.open() as f:
+        written = list(csv.DictReader(f))
+    assert len(written) == 2
+    assert written[0]["rule__block_when_run_tainted__attacked"] == "1"
+    assert written[1]["rule__block_when_run_tainted__attacked"] == "1"
+    # Declared-but-unfired: "0" (declared, never matched), not "" (undeclared).
+    assert written[0]["rule__block_never_fires__attacked"] == "0"
+    assert written[1]["rule__block_never_fires__attacked"] == "0"
+
+
+def test_write_quartet_csv_rows_schema_growth_rewrite(tmp_path):
+    """A rule name unseen by the file's current header must not corrupt it.
+
+    rule_a and rule_b stand in for two different policies' declared rules
+    (row() only ever puts a row's own rule in its blocks_by_rule dict, same
+    as _quartet_repeat_metrics does after zero-seeding from that row's own
+    policy) -- so each row's *other* rule column should read as "" (not
+    declared by this row's policy), never "0" (declared, never fired).
+    """
+
+    def row(repeat: int, blocks_attacked: dict[str, int]) -> dict:
+        fixed = {col: 0 for col in compute_results._FIXED_CSV_FIELDNAMES}
+        fixed.update({"suite": "banking", "policy": "targeted", "repeat": repeat, "deduplicated": "yes"})
+        return {"fixed": fixed, "blocks_by_rule_benign": {}, "blocks_by_rule_attacked": blocks_attacked}
+
+    csv_path = tmp_path / "results.csv"
+    _write_quartet_csv_rows([row(0, {"rule_a": 3})], csv_path)
+
+    with csv_path.open() as f:
+        first_pass = list(csv.DictReader(f))
+    assert first_pass[0]["rule__rule_a__attacked"] == "3"
+    assert "rule__rule_b__attacked" not in first_pass[0]
+
+    _write_quartet_csv_rows([row(1, {"rule_b": 5})], csv_path)
+
+    with csv_path.open() as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+        fieldnames = reader.fieldnames
+
+    assert "rule__rule_a__attacked" in fieldnames
+    assert "rule__rule_b__attacked" in fieldnames
+    assert len(rows) == 2
+    assert rows[0]["rule__rule_a__attacked"] == "3"
+    assert rows[0]["rule__rule_b__attacked"] == ""  # not declared by row 0's policy
+    assert rows[1]["rule__rule_a__attacked"] == ""  # not declared by row 1's policy
+    assert rows[1]["rule__rule_b__attacked"] == "5"
+    assert csv_path.read_text().count("suite,policy,repeat") == 1  # header written exactly once
+
+
+# ---------------------------------------------------------------------------
+# _policy_declared_block_rules: rule names come from the policy, not events
+# ---------------------------------------------------------------------------
+
+
+def test_policy_declared_block_rules_only_returns_block_action_rules(tmp_path):
+    policy_path = tmp_path / "policy.yaml"
+    policy_path.write_text(
+        """\
+version: "1.0"
+defaults:
+  sink_action: allow
+sources: []
+sinks:
+  agentdojo.send_money:
+    - name: block_when_run_tainted
+      when: run.tainted
+      action: block
+    - name: allow_by_default
+      action: allow
+"""
+    )
+    assert _policy_declared_block_rules(str(policy_path)) == frozenset({"block_when_run_tainted"})
+
+
+def test_policy_declared_block_rules_missing_file_returns_empty(tmp_path):
+    assert _policy_declared_block_rules(str(tmp_path / "does_not_exist.yaml")) == frozenset()
+
+
+def test_policy_declared_block_rules_none_returns_empty():
+    assert _policy_declared_block_rules(None) == frozenset()
+
+
+# ---------------------------------------------------------------------------
+# Fix 3: warn (not silently drop) when a case is missing from D
+# ---------------------------------------------------------------------------
+
+
+def test_quartet_repeat_metrics_warns_on_case_missing_from_d(tmp_path, capsys):
+    ceiling = tmp_path / "ceiling"
+    asr_model = tmp_path / "asr_model"
+    utility = tmp_path / "utility"
+    asr_system = tmp_path / "asr_system"
+
+    _build_no_attack_dir(ceiling, None, {"user_task_0": True})
+    _build_no_attack_dir(utility, STRICT_DEFENSE, {"user_task_0": True})
+    # B has two cases; D (built below) only covers one -- user_task_1 is
+    # present in B but missing from D.
+    _build_attacked_dir(
+        asr_model,
+        ALLOW_ALL_DEFENSE,
+        cases={"user_task_0": True, "user_task_1": True},
+        call_records={
+            "run-user_task_0": [{"tool": "agentdojo.send_money", "args": {}}],
+            "run-user_task_1": [{"tool": "agentdojo.send_money", "args": {}}],
+        },
+    )
+    _build_attacked_dir(asr_system, STRICT_DEFENSE, cases={"user_task_0": False})
+
+    result = _quartet_repeat_metrics(
+        ceiling / "repeat_0", asr_model / "repeat_0", utility / "repeat_0", asr_system / "repeat_0", allow_dirty=True
+    )
+
+    captured = capsys.readouterr()
+    assert "missing from D" in captured.out
+    assert "user_task_1" in captured.out
+    # The missing case is excluded, not miscounted: only user_task_0 is classified.
+    assert sum(result["taxonomy"].values()) == 1
+
+
+# ---------------------------------------------------------------------------
+# Fix 4: warn when ceiling (A) and utility (C) case counts disagree
+# ---------------------------------------------------------------------------
+
+
+def test_quartet_repeat_metrics_warns_on_retention_denominator_mismatch(tmp_path, capsys):
+    ceiling = tmp_path / "ceiling"
+    asr_model = tmp_path / "asr_model"
+    utility = tmp_path / "utility"
+    asr_system = tmp_path / "asr_system"
+
+    # Ceiling has two cases, utility only has one -- retention_num/den
+    # (u_policy_num/u_ceiling_num) won't equal utility_interbolt/utility_ceiling.
+    _build_no_attack_dir(ceiling, None, {"user_task_0": True, "user_task_1": True})
+    _build_no_attack_dir(utility, STRICT_DEFENSE, {"user_task_0": True})
+    _build_attacked_dir(asr_model, ALLOW_ALL_DEFENSE, cases={"user_task_0": True})
+    _build_attacked_dir(asr_system, STRICT_DEFENSE, cases={"user_task_0": True})
+
+    _quartet_repeat_metrics(
+        ceiling / "repeat_0", asr_model / "repeat_0", utility / "repeat_0", asr_system / "repeat_0", allow_dirty=True
+    )
+
+    captured = capsys.readouterr()
+    assert "different case counts" in captured.out
+    assert "(2 vs 1)" in captured.out
+
+
 # ---------------------------------------------------------------------------
 # CLI validation
 # ---------------------------------------------------------------------------
@@ -364,6 +753,52 @@ def test_main_rejects_no_args(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["compute_results"])
     with pytest.raises(SystemExit):
         main()
+
+
+def test_main_rejects_csv_out_without_quartet_flags(tmp_path, monkeypatch):
+    run_dir = tmp_path / "solo"
+    _build_no_attack_dir(run_dir, None, {"user_task_0": True})
+    monkeypatch.setattr(
+        sys, "argv", ["compute_results", str(run_dir), "--csv-out", str(tmp_path / "out.csv"), "--allow-dirty"]
+    )
+    with pytest.raises(SystemExit):
+        main()
+
+
+def test_main_writes_csv_quartet(tmp_path, monkeypatch):
+    ceiling = tmp_path / "ceiling"
+    asr_model = tmp_path / "asr_model"
+    utility = tmp_path / "utility"
+    asr_system = tmp_path / "asr_system"
+    csv_path = tmp_path / "out.csv"
+
+    _build_no_attack_dir(ceiling, None, {"user_task_0": True})
+    _build_no_attack_dir(utility, STRICT_DEFENSE_WITH_HASH, {"user_task_0": True})
+    _build_attacked_dir(asr_model, ALLOW_ALL_DEFENSE, cases={"user_task_0": True})
+    _build_attacked_dir(asr_system, STRICT_DEFENSE_WITH_HASH, cases={"user_task_0": True})
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "compute_results",
+            "--ceiling", str(ceiling),
+            "--asr-model", str(asr_model),
+            "--utility", str(utility),
+            "--asr-system", str(asr_system),
+            "--csv-out", str(csv_path),
+            "--allow-dirty",
+        ],
+    )
+
+    main()
+
+    assert csv_path.exists()
+    with csv_path.open() as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 1
+    assert rows[0]["repeat"] == "0"
+    assert rows[0]["suite"] == SUITE
 
 
 # ---------------------------------------------------------------------------

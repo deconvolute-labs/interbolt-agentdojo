@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from analysis.common.artifacts import load_jsonl, load_policy_yaml, read_csv_rows, read_json
+from analysis.common.artifacts import load_jsonl, load_policy_yaml, read_csv_rows, read_json, suite_scoped_dir
 from analysis.common.discovery import ROLE_B_ASR_MODEL, ROLE_D_ASR_SYSTEM, RunRecord
 from analysis.common.treestats import format_bytes, tree_summary
 
@@ -107,10 +107,15 @@ def _schema_version_of(path: Path) -> int | None:
     return records[0].get("schema_version")
 
 
-def render_file_type_samples(records: list[RunRecord], policies_root: Path, summary_csv: Path) -> str:
+def render_file_type_samples(
+    records: list[RunRecord], policies_root: Path, summary_csvs: dict[str, Path], example_suite: str
+) -> str:
     lines = ["## 2. File-type samples (first 2 records / 40 lines, pretty-printed)", ""]
 
-    a_record = next(r for r in records if r.role == "A_ceiling" and r.suite == "banking")
+    try:
+        a_record = next(r for r in records if r.role == "A_ceiling" and r.suite == example_suite)
+    except StopIteration:
+        raise ValueError(f"no A_ceiling record found for suite {example_suite!r}") from None
     b_records = [r for r in records if r.role == ROLE_B_ASR_MODEL]
     d_records = [r for r in records if r.role == ROLE_D_ASR_SYSTEM]
 
@@ -156,7 +161,12 @@ def render_file_type_samples(records: list[RunRecord], policies_root: Path, summ
 
     # AgentDojo per-case JSON -- benign / attacked / pseudo-case
     lines.append("### AgentDojo per-case result JSON")
-    c_record = next(r for r in records if r.role == "C_utility" and r.policy and r.policy.name == "strict" and r.suite == "banking")
+    try:
+        c_record = next(
+            r for r in records if r.role == "C_utility" and r.policy and r.policy.name == "strict" and r.suite == example_suite
+        )
+    except StopIteration:
+        raise ValueError(f"no C_utility/strict record found for suite {example_suite!r}") from None
     benign_path = _find_benign_case_json(c_record)
     lines.append(f"**Benign case**, sampled from `{benign_path}`:")
     lines.append(_pretty_json_sample(benign_path) if benign_path else "_(none found)_")
@@ -177,7 +187,7 @@ def render_file_type_samples(records: list[RunRecord], policies_root: Path, summ
     # Policy YAML
     lines.append("### Policy YAML")
     for name in ("allow_all", "strict", "targeted"):
-        path = policies_root / "banking" / f"{name}.yaml"
+        path = suite_scoped_dir(policies_root, example_suite) / f"{name}.yaml"
         lines.append(f"**`{name}.yaml`** (`{path}`):")
         if path.exists():
             content = load_policy_yaml(path)
@@ -188,18 +198,21 @@ def render_file_type_samples(records: list[RunRecord], policies_root: Path, summ
             lines.append(f"_(not found: `{path}`)_")
         lines.append("")
 
-    # Summary CSV
+    # Summary CSV -- one per suite (`<results_root>/<suite>/results.csv`, accumulated
+    # across policies/repeats by `compute_results.py --csv-out`); not every suite has
+    # one yet (e.g. travel, at time of writing).
     lines.append("### Summary CSV")
-    lines.append(f"`{summary_csv}`:")
-    if summary_csv.exists():
-        header, rows = read_csv_rows(summary_csv)
-        lines.append(f"Header ({len(header)} columns): `{header}`")
-        for row in rows[:2]:
-            lines.append(f"- `{row}`")
-        lines.append(f"_({len(rows)} data rows total)_")
-    else:
-        lines.append(f"_(not found: `{summary_csv}`)_")
-    lines.append("")
+    for suite, summary_csv in summary_csvs.items():
+        lines.append(f"**{suite}**, `{summary_csv}`:")
+        if summary_csv.exists():
+            header, rows = read_csv_rows(summary_csv)
+            lines.append(f"Header ({len(header)} columns): `{header}`")
+            for row in rows[:2]:
+                lines.append(f"- `{row}`")
+            lines.append(f"_({len(rows)} data rows total)_")
+        else:
+            lines.append(f"_(not found: `{summary_csv}`)_")
+        lines.append("")
 
     # results_*.md
     lines.append("### `results_*.md`")

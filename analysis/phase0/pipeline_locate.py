@@ -16,9 +16,10 @@ def render_pipeline_locate_section(repo_root: Path) -> str:
     )
     lines.append("")
     lines.append(
-        "This is the pipeline that produced `runs/published/AgentDojo-Interbolt-Benchmark.csv` -- "
-        "confirmed by re-running its quartet mode against `runs/published/` and reproducing all "
-        "four published rows exactly (see the plan's Verification section)."
+        "This is the pipeline that produces each suite's `runs/published/<suite>/results.csv` "
+        "(one file per suite, accumulating one row per repeat per policy via `--csv-out`) -- "
+        "confirmed by re-running its quartet mode against `runs/published/` and reproducing the "
+        "published banking rows exactly (see the plan's Verification section)."
     )
     lines.append("")
     lines.append("**Entry point** (live-introspected `argparse` help, so this text can't go stale):")
@@ -30,10 +31,11 @@ def render_pipeline_locate_section(repo_root: Path) -> str:
     lines.append("```bash")
     lines.append(
         "uv run python -m interbolt_agentdojo.compute_results \\\n"
-        "  --ceiling runs/published/banking-gpt-4o-mini/A_ceiling \\\n"
-        "  --asr-model runs/published/banking-gpt-4o-mini/B_asr_model \\\n"
-        "  --utility runs/published/banking-gpt-4o-mini/C_utility_targeted \\\n"
-        "  --asr-system runs/published/banking-gpt-4o-mini/D_asr_system_targeted \\\n"
+        "  --ceiling runs/published/banking/A_ceiling \\\n"
+        "  --asr-model runs/published/banking/B_asr_model \\\n"
+        "  --utility runs/published/banking/C_utility_targeted \\\n"
+        "  --asr-system runs/published/banking/D_asr_system_targeted \\\n"
+        "  --csv-out runs/published/banking/results.csv \\\n"
         "  --allow-dirty"
     )
     lines.append("```")

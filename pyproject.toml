@@ -15,6 +15,9 @@ dependencies = [
 
 [dependency-groups]
 dev = ["pytest"]
+# Optional: only analysis/tier3's figure (N8) and confidence-interval (N4) computations need
+# these. Sync with `uv sync --group analysis`; the rest of analysis/ has no new dependencies.
+analysis = ["matplotlib", "scipy"]
 
 # Interbolt source toggle:
 #

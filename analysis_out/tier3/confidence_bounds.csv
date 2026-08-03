@@ -1,0 +1,17 @@
+suite,policy,repeat,metric,k,n,observed_rate,ci_lower,ci_upper,alpha
+banking,strict,0,asr_system,0,144,0.0000,0.0000,0.0253,0.05
+banking,strict,1,asr_system,0,144,0.0000,0.0000,0.0253,0.05
+banking,targeted,0,asr_system,0,144,0.0000,0.0000,0.0253,0.05
+banking,targeted,1,asr_system,0,144,0.0000,0.0000,0.0253,0.05
+banking,strict,0,block_rate,66,66,1.0000,0.9456,1.0000,0.05
+banking,strict,1,block_rate,68,68,1.0000,0.9472,1.0000,0.05
+banking,targeted,0,block_rate,67,67,1.0000,0.9464,1.0000,0.05
+banking,targeted,1,block_rate,66,66,1.0000,0.9456,1.0000,0.05
+banking,,0,contamination,0,543,0.0000,0.0000,0.0068,0.05
+banking,,1,contamination,0,532,0.0000,0.0000,0.0069,0.05
+travel,strict,0,block_rate,22,22,1.0000,0.8456,1.0000,0.05
+travel,strict,1,block_rate,27,27,1.0000,0.8723,1.0000,0.05
+travel,targeted,0,block_rate,24,24,1.0000,0.8575,1.0000,0.05
+travel,targeted,1,block_rate,23,23,1.0000,0.8518,1.0000,0.05
+travel,,0,contamination,0,1154,0.0000,0.0000,0.0032,0.05
+travel,,1,contamination,0,1151,0.0000,0.0000,0.0032,0.05

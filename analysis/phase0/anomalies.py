@@ -46,7 +46,9 @@ def _expected_case_counts(suite_name: str, benchmark_version: str) -> tuple[int,
     return len(suite.user_tasks), len(suite.injection_tasks)
 
 
-def render_anomalies_section(records: list[RunRecord], results_root: Path, repo_root: Path) -> str:
+def render_anomalies_section(
+    records: list[RunRecord], results_root: Path, repo_root: Path, summary_csvs: dict[str, Path]
+) -> str:
     lines = ["## 6. Missing / anomalous artifacts", ""]
 
     # -- Empty / manifestless directories, cross-referenced against misplaced runs --
@@ -113,6 +115,11 @@ def render_anomalies_section(records: list[RunRecord], results_root: Path, repo_
     lines.append("|---|---|---|---|---|---|---|")
     off_version_count = 0
     for r in records:
+        if r.role == ROLE_A_CEILING:
+            lines.append(
+                f"| {r.suite} | {r.role} | | _(excluded: no policy, no `interbolt_events.jsonl`)_ | | | |"
+            )
+            continue
         if r.role not in (ROLE_B_ASR_MODEL, ROLE_C_UTILITY, ROLE_D_ASR_SYSTEM):
             continue
         version = _schema_version_of(r.repeat_dir / "interbolt_events.jsonl")
@@ -181,26 +188,34 @@ def render_anomalies_section(records: list[RunRecord], results_root: Path, repo_
     dirty_count = sum(1 for r in records if (r.manifest.get("agentdojo") or {}).get("dirty"))
     lines.append("### Reproducibility: `agentdojo.dirty`")
     lines.append(
-        f"`{dirty_count}/{len(records)}` run manifests record `agentdojo.dirty: true` -- meaning "
-        f"none of these runs would pass `compute_results.py`'s own `_check_publishable` gate "
-        f"without `--allow-dirty`. Worth resolving before treating any of these numbers as final."
+        f"`{dirty_count}/{len(records)}` run manifests record `agentdojo.dirty: true` -- "
+        f"{dirty_count} of {len(records)} would fail `compute_results.py`'s own `_check_publishable` "
+        f"gate without `--allow-dirty` ({len(records) - dirty_count} would pass). Worth resolving "
+        f"before treating any of these numbers as final."
     )
     lines.append("")
 
-    # -- Stray CSV --
-    lines.append("### Stray summary CSV")
-    canonical = results_root / "AgentDojo-Interbolt-Benchmark.csv"
+    # -- Per-suite canonical summary CSVs --
+    lines.append("### Summary CSV coverage")
+    for suite, path in summary_csvs.items():
+        if path.exists():
+            _, rows = read_csv_rows(path)
+            lines.append(f"- `{path}`: found, {len(rows)} data row(s).")
+        else:
+            lines.append(f"- `{path}`: **not found** -- {suite}'s results haven't been published yet.")
+    lines.append("")
+
+    # -- Stray legacy CSV --
+    lines.append("### Stray legacy summary CSV")
     stray = repo_root / "results" / "AgentDojo-Interbolt-Benchmark.csv"
     if stray.exists():
-        canon_header, canon_rows = read_csv_rows(canonical)
         stray_header, stray_rows = read_csv_rows(stray)
         lines.append(
-            f"`{stray}` also exists (repo-root `results/`, gitignored) and is **not** the same "
-            f"as the canonical `{canonical}`: {len(stray_header)} columns / {len(stray_rows)} rows "
-            f"vs. canonical's {len(canon_header)} columns / {len(canon_rows)} rows. "
-            f"Column set differs: only-in-stray = {sorted(set(stray_header) - set(canon_header))}, "
-            f"only-in-canonical = {sorted(set(canon_header) - set(stray_header))}. "
-            f"**Treat `{stray}` as a stale draft; use only `{canonical}`.**"
+            f"`{stray}` exists (repo-root `results/`, gitignored): {len(stray_header)} columns / "
+            f"{len(stray_rows)} rows. This predates the per-suite `results.csv` split above (it "
+            f"was a single combined-suite file under an older schema), so it has no current "
+            f"per-suite file to diff against column-for-column. "
+            f"**Treat it as pre-restructure legacy debris; ignore or delete it.**"
         )
     else:
         lines.append(f"`{stray}` not found in this checkout.")

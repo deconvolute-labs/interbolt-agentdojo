@@ -50,11 +50,19 @@ def _call_ordering_demo(repeat_dir: Path) -> str:
     )
 
 
-def render_join_key_matrix(records: list[RunRecord], repo_root: Path) -> str:
+def render_join_key_matrix(records: list[RunRecord], repo_root: Path, example_suite: str) -> str:
     lines = ["## 3. Join-key matrix", ""]
 
-    b_record = next(r for r in records if r.role == ROLE_B_ASR_MODEL and r.suite == "banking")
-    d_record = next(r for r in records if r.role == ROLE_D_ASR_SYSTEM and r.suite == "banking" and r.policy.name == "strict")
+    try:
+        b_record = next(r for r in records if r.role == ROLE_B_ASR_MODEL and r.suite == example_suite)
+    except StopIteration:
+        raise ValueError(f"no B_asr_model record found for suite {example_suite!r}") from None
+    try:
+        d_record = next(
+            r for r in records if r.role == ROLE_D_ASR_SYSTEM and r.suite == example_suite and r.policy.name == "strict"
+        )
+    except StopIteration:
+        raise ValueError(f"no D_asr_system/strict record found for suite {example_suite!r}") from None
 
     events = load_jsonl(b_record.repeat_dir / "interbolt_events.jsonl")
     agent_ids = sorted({e["decision"]["agent_id"] for e in events})
