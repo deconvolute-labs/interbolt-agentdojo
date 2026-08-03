@@ -1,12 +1,19 @@
-# interbolt-agentdojo
+# Benchmark: Interbolt on AgentDojo
 
-Benchmark harness evaluating [Interbolt](https://github.com/deconvolute-labs/interbolt) as a defense on the [AgentDojo](https://github.com/ethz-spylab/agentdojo) agent-security benchmark.
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Interbolt](https://img.shields.io/badge/interbolt-0.2.0-1d4ed8.svg)](https://github.com/deconvolute-labs/interbolt)
+[![AgentDojo](https://img.shields.io/badge/agentdojo-v1.2.2-64748b.svg)](https://github.com/ethz-spylab/agentdojo)
 
-Interbolt gates an agent's tool calls on the provenance of the data reaching them, with no model in the decision path. This harness attaches it to AgentDojo's tool executor, runs the banking and travel suites under two policy tiers against an undefended baseline, and reports what enforcement blocked and what it cost.
+<p align="center">
+  <strong><a href="https://github.com/deconvolute-labs/interbolt">Interbolt Library</a></strong>
+  &nbsp;•&nbsp;
+  <strong><a href="https://deconvoluteai.com/blog/provenance-agentdojo-benchmark">In-depth Analysis</a></strong>
+</p>
 
-**The write-up is at [Prompt Injection Defense by Provenance: AgentDojo Results](https://deconvolutelabs.com/blog/prompt-injection-defense-provenance-agentdojo-benchmark).** It covers the measurement design, the results, and their limits. This README covers how to reproduce them.
+Benchmarking [**Interbolt**](https://github.com/deconvolute-labs/interbolt), a library that gates an agent's tool calls on the provenance of the data reaching them with no model in the decision path, as a defense on the [AgentDojo](https://github.com/ethz-spylab/agentdojo) agent-security benchmark.
 
-Both AgentDojo and Interbolt are used unmodified.
+It attaches Interbolt to AgentDojo's tool executor, runs the banking and travel suites under two policy tiers against an undefended baseline, and reports what enforcement blocked and what it cost. Both AgentDojo and Interbolt are used unmodified.
 
 ## Results
 
@@ -115,7 +122,7 @@ The full rationale, like why raw ASR doesn't isolate the defense, the policy-aut
 
 **Model registry bypass.** AgentDojo's `ModelsEnum` is a `StrEnum` that cannot be extended at runtime, and forking AgentDojo to patch it would mean carrying patches against every future version. `models_ext.make_llm(model_string)` constructs the provider client directly and passes the object as `PipelineConfig(llm=...)`, which AgentDojo already accepts alongside an enum string. New model ids are a one-line addition here rather than a patch there.
 
-The same bypass overrides a provider's default auth mode. `run_benchmark._resolve_model` forces every `gemini-` id through `make_llm` regardless of enum membership, because AgentDojo wires Google models to Vertex AI while this harness uses a `GOOGLE_API_KEY` client. OpenAI has no such mismatch, so its branch exists only to catch unenumerated ids.
+The same bypass overrides a provider's default auth mode. `run_benchmark._resolve_model` forces every `gemini-` id through `make_llm` regardless of enum membership, because AgentDojo wires Google models to Vertex AI while this repo uses a `GOOGLE_API_KEY` client. OpenAI has no such mismatch, so its branch exists only to catch unenumerated ids.
 
 **Replay tooling.** `replay_policy.py` evaluates a candidate policy offline against a recorded `call_records.jsonl`, with no live run and no API calls. It cannot show trajectory effects, since a blocked call changes what the model does next, so replay ASR is optimistic and replay utility is unreliable. Replay is for iteration and regression checking. Published numbers come only from live enforce runs.
 
