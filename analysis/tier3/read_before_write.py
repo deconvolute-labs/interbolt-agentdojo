@@ -12,7 +12,7 @@ import csv
 from dataclasses import dataclass
 from pathlib import Path
 
-from interbolt_agentdojo.executor import NAMESPACE
+from interbolt_agentdojo.namespaces import resolve_namespace
 
 from analysis.common.artifacts import discover_results, run_trajectory, selected_run_ids
 from analysis.common.discovery import ROLE_C_UTILITY, ROLE_D_ASR_SYSTEM, RunRecord
@@ -39,7 +39,9 @@ def compute_rows(records: list[RunRecord]) -> list[ReadBeforeWriteRow]:
     for record in records:
         if record.role not in (ROLE_C_UTILITY, ROLE_D_ASR_SYSTEM):
             continue
-        state_changing = {f"{NAMESPACE}.{t}" for t in STATE_CHANGING_TOOLS.get(record.suite, frozenset())}
+        state_changing = {
+            f"{resolve_namespace(record.suite, t)}.{t}" for t in STATE_CHANGING_TOOLS.get(record.suite, frozenset())
+        }
         selected, inv = run_id_to_case(record)
         policy_name = record.policy.name if record.policy else "none"
         for run_id in selected:

@@ -188,9 +188,9 @@ def build_attacked_case_table(quartets: list[Quartet]) -> tuple[list[AttackedCas
             run_id_b = case_to_run_b.get(case_key)
             run_id_d = case_to_run_d.get(case_key)
 
-            reached_sink_b = reached_target_sink(call_records_b.get(run_id_b, []), tools)
+            reached_sink_b = reached_target_sink(call_records_b.get(run_id_b, []), tools, suite.name)
             events_for_case_d = events_by_run_d.get(run_id_d, [])
-            blocked_d = interbolt_blocked_target_sink(events_for_case_d, tools)
+            blocked_d = interbolt_blocked_target_sink(events_for_case_d, tools, suite.name)
             bucket = classify_case(bool(result_b.security), reached_sink_b, bool(result_d.security), blocked_d)
 
             rows.append(
@@ -296,7 +296,7 @@ def refusal_counts_by_injection_task(record: RunRecord) -> dict[str, tuple[int, 
     for (user_task_id, injection_task_id), result in with_injections.items():
         tools = target_tools(suite, injection_task_id)
         records = call_records.get(run_ids.get((user_task_id, injection_task_id)), [])
-        reached = reached_target_sink(records, tools)
+        reached = reached_target_sink(records, tools, suite.name)
         bucket = classify_case(bool(result.security), reached, False, False)
         refused, total = counts.get(injection_task_id, (0, 0))
         counts[injection_task_id] = (refused + (bucket == "model_refused"), total + 1)

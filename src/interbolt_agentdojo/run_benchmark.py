@@ -24,8 +24,11 @@ from agentdojo.logging import OutputLogger
 from agentdojo.models import ModelsEnum
 from agentdojo.task_suite.load_suites import get_suite
 from interbolt import JsonlReporter
+from interbolt.constants import DEFAULT_AGENT_ID as INTERBOLT_RESERVED_AGENT_ID
+from interbolt.utils.names import validate_agent_id
 
 from interbolt_agentdojo import progress
+from interbolt_agentdojo.executor import DEFAULT_AGENT_ID
 from interbolt_agentdojo.manifest import write_manifest
 from interbolt_agentdojo.models_ext import make_llm
 from interbolt_agentdojo.pipeline import (
@@ -45,6 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--attack", default=None)
     parser.add_argument("--policy", default=None)
     parser.add_argument("--mode", choices=["enforce", "dry_run"], default=None)
+    parser.add_argument("--agent-id", default=DEFAULT_AGENT_ID)
     parser.add_argument("--user-tasks", nargs="+", default=None)
     parser.add_argument("--injection-tasks", nargs="+", default=None)
     parser.add_argument("--repeats", type=int, default=1)
@@ -93,8 +97,9 @@ def _run_once(args: argparse.Namespace, repeat_dir: Path) -> None:
             mode,
             reporter,
             call_records_path=repeat_dir / "call_records.jsonl",
+            agent_id=args.agent_id,
         )
-        pipeline = RunScopedPipeline(inner, repeat_dir / "run_index.jsonl")
+        pipeline = RunScopedPipeline(inner, repeat_dir / "run_index.jsonl", agent_id=args.agent_id)
         args.mode = mode
     else:
         pipeline = build_plain_pipeline(model, suite)
@@ -146,6 +151,14 @@ def _run_once(args: argparse.Namespace, repeat_dir: Path) -> None:
 
 
 def run(args: argparse.Namespace) -> None:
+    if getattr(args, "policy", None):
+        validate_agent_id(args.agent_id)
+        if args.agent_id == INTERBOLT_RESERVED_AGENT_ID:
+            raise SystemExit(
+                f"--agent-id {args.agent_id!r} is reserved by interbolt for implicit "
+                "no-context use and may not be used as an explicit harness identity"
+            )
+
     for i in range(args.repeats):
         if args.repeats > 1:
             progress.get_logger().info(f"=== repeat {i + 1}/{args.repeats} ===")

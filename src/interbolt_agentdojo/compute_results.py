@@ -24,9 +24,9 @@ from pathlib import Path
 from agentdojo.benchmark import load_task_results
 from agentdojo.task_suite.load_suites import get_suite
 from interbolt import Action, Policy
-from interbolt.errors import PolicyEvaluationError
+from interbolt.errors import InterboltConfigError, PolicyEvaluationError
 
-from interbolt_agentdojo.executor import NAMESPACE
+from interbolt_agentdojo.namespaces import resolve_namespace
 
 
 def _load_manifest(repeat_dir: Path) -> dict:
@@ -146,13 +146,13 @@ def _policy_declared_block_rules(policy_file: str | None) -> frozenset[str]:
         return frozenset()
     try:
         policy = Policy.from_file(policy_file)
-    except PolicyEvaluationError as exc:
+    except (PolicyEvaluationError, InterboltConfigError) as exc:
         print(f"  ** WARNING: could not load policy {policy_file!r} for rule-column seeding: {exc} **")
         return frozenset()
     return frozenset(
         rule.name
-        for rules in policy.document.sinks.values()
-        for rule in rules
+        for sink in policy.document.sinks.values()
+        for rule in sink.rules
         if rule.action is Action.BLOCK
     )
 
@@ -383,14 +383,14 @@ def _target_tools(suite, injection_task_id: str) -> set[str]:
     return {call.function for call in injection_task.ground_truth(env)}
 
 
-def _reached_target_sink(records: list[dict], target_tools: set[str]) -> bool:
+def _reached_target_sink(records: list[dict], target_tools: set[str], suite_name: str) -> bool:
     """Whether any recorded tool call (call_records.jsonl) hit a target-sink tool.
 
     Tool-name match only (not argument-aware) -- see README's "Target-sink
     derivation" for why, and for the `ambiguous_sink_match` taxonomy count
     this criterion produces.
     """
-    qualified = {f"{NAMESPACE}.{t}" for t in target_tools}
+    qualified = {f"{resolve_namespace(suite_name, t)}.{t}" for t in target_tools}
     return any(r["tool"] in qualified for r in records)
 
 
@@ -402,9 +402,9 @@ def _reached_target_sink(records: list[dict], target_tools: set[str]) -> bool:
 _BLOCK_EQUIVALENT_OUTCOMES = {"block", "require_approval"}
 
 
-def _interbolt_blocked_target_sink(events: list[dict], target_tools: set[str]) -> bool:
+def _interbolt_blocked_target_sink(events: list[dict], target_tools: set[str], suite_name: str) -> bool:
     """Whether Interbolt blocked (or auto-denied) a target-sink tool call."""
-    qualified = {f"{NAMESPACE}.{t}" for t in target_tools}
+    qualified = {f"{resolve_namespace(suite_name, t)}.{t}" for t in target_tools}
     return any(
         e.get("outcome") in _BLOCK_EQUIVALENT_OUTCOMES and e["decision"]["tool"] in qualified for e in events
     )
@@ -472,10 +472,10 @@ def _quartet_repeat_metrics(
         target_tools = _target_tools(suite, injection_task_id)
 
         records_b = call_records_b.get(case_to_run_b.get(case_key), [])
-        reached_sink_b = _reached_target_sink(records_b, target_tools)
+        reached_sink_b = _reached_target_sink(records_b, target_tools, suite.name)
 
         events_for_case_d = events_by_run_d.get(case_to_run_d.get(case_key), [])
-        blocked_d = _interbolt_blocked_target_sink(events_for_case_d, target_tools)
+        blocked_d = _interbolt_blocked_target_sink(events_for_case_d, target_tools, suite.name)
 
         taxonomy[_classify_case(result_b.security, reached_sink_b, result_d.security, blocked_d)] += 1
 

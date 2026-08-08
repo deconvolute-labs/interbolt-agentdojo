@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from agentdojo.task_suite.load_suites import get_suite
-from interbolt_agentdojo.executor import NAMESPACE
+from interbolt_agentdojo.namespaces import resolve_namespace
 
 from analysis.common.artifacts import case_json_path, discover_results, raw_tool_call_names, read_json, target_tools
 from analysis.common.discovery import ROLE_A_CEILING, RunRecord
@@ -74,7 +74,7 @@ def _benign_successful_sinks(records: list[RunRecord]) -> dict[str, set[str]]:
                 continue
             data = read_json(path)
             for tool in raw_tool_call_names(data.get("messages", [])):
-                sinks.add(f"{NAMESPACE}.{tool}")
+                sinks.add(f"{resolve_namespace(record.suite, tool)}.{tool}")
     return result
 
 
@@ -93,7 +93,7 @@ def attack_target_sinks(records: list[RunRecord], exclude_unreachable: bool) -> 
         for injection_task_id in suite_obj.injection_tasks:
             if injection_task_id in excluded:
                 continue
-            sinks |= {f"{NAMESPACE}.{tool}" for tool in target_tools(suite_obj, injection_task_id)}
+            sinks |= {f"{resolve_namespace(suite, tool)}.{tool}" for tool in target_tools(suite_obj, injection_task_id)}
         result[suite] = sinks
     return result
 

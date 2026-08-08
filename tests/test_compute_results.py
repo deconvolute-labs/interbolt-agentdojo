@@ -69,30 +69,30 @@ def test_target_tools_matches_known_injection_task():
 
 
 def test_reached_target_sink_matches_qualified_tool_name():
-    records = [{"tool": "agentdojo.get_balance", "args": {}}, {"tool": "agentdojo.send_money", "args": {}}]
-    assert _reached_target_sink(records, {"send_money"}) is True
+    records = [{"tool": "banking.get_balance", "args": {}}, {"tool": "banking.send_money", "args": {}}]
+    assert _reached_target_sink(records, {"send_money"}, SUITE) is True
 
 
 def test_reached_target_sink_false_when_absent():
-    records = [{"tool": "agentdojo.get_balance", "args": {}}]
-    assert _reached_target_sink(records, {"send_money"}) is False
+    records = [{"tool": "banking.get_balance", "args": {}}]
+    assert _reached_target_sink(records, {"send_money"}, SUITE) is False
 
 
 def test_interbolt_blocked_target_sink_true_for_hard_block():
-    events = [{"outcome": "block", "decision": {"tool": "agentdojo.send_money"}}]
-    assert _interbolt_blocked_target_sink(events, {"send_money"}) is True
+    events = [{"outcome": "block", "decision": {"tool": "banking.send_money"}}]
+    assert _interbolt_blocked_target_sink(events, {"send_money"}, SUITE) is True
 
 
 def test_interbolt_blocked_target_sink_true_for_auto_denied_approval():
     # require_approval is auto-denied under the default resolver, scored as
     # blocked-for-security everywhere else in this harness -- same convention here.
-    events = [{"outcome": "require_approval", "decision": {"tool": "agentdojo.send_money"}}]
-    assert _interbolt_blocked_target_sink(events, {"send_money"}) is True
+    events = [{"outcome": "require_approval", "decision": {"tool": "banking.send_money"}}]
+    assert _interbolt_blocked_target_sink(events, {"send_money"}, SUITE) is True
 
 
 def test_interbolt_blocked_target_sink_false_for_allow():
-    events = [{"outcome": "allow", "decision": {"tool": "agentdojo.send_money"}}]
-    assert _interbolt_blocked_target_sink(events, {"send_money"}) is False
+    events = [{"outcome": "allow", "decision": {"tool": "banking.send_money"}}]
+    assert _interbolt_blocked_target_sink(events, {"send_money"}, SUITE) is False
 
 
 # ---------------------------------------------------------------------------
@@ -252,9 +252,9 @@ def test_five_numbers_happy_path(tmp_path):
         ALLOW_ALL_DEFENSE,
         cases={"user_task_0": True, "user_task_1": False, "user_task_2": True},
         call_records={
-            "run-user_task_0": [{"tool": "agentdojo.send_money", "args": {}}],
-            "run-user_task_1": [{"tool": "agentdojo.get_balance", "args": {}}],
-            "run-user_task_2": [{"tool": "agentdojo.send_money", "args": {}}],
+            "run-user_task_0": [{"tool": "banking.send_money", "args": {}}],
+            "run-user_task_1": [{"tool": "banking.get_balance", "args": {}}],
+            "run-user_task_2": [{"tool": "banking.send_money", "args": {}}],
         },
     )
     d_run_ids = _build_attacked_dir(
@@ -262,8 +262,8 @@ def test_five_numbers_happy_path(tmp_path):
         STRICT_DEFENSE,
         cases={"user_task_0": False, "user_task_1": False, "user_task_2": True},
         events={
-            "run-user_task_0": [{"outcome": "block", "decision": {"tool": "agentdojo.send_money"}}],
-            "run-user_task_2": [{"outcome": "allow", "decision": {"tool": "agentdojo.send_money"}}],
+            "run-user_task_0": [{"outcome": "block", "decision": {"tool": "banking.send_money"}}],
+            "run-user_task_2": [{"outcome": "allow", "decision": {"tool": "banking.send_money"}}],
         },
     )
     assert b_run_ids and d_run_ids  # run ids used only via file contents above
@@ -297,7 +297,7 @@ def test_five_numbers_block_rate_undefined_when_all_refused(tmp_path):
         asr_model,
         ALLOW_ALL_DEFENSE,
         cases={"user_task_0": False},
-        call_records={"run-user_task_0": [{"tool": "agentdojo.get_balance", "args": {}}]},
+        call_records={"run-user_task_0": [{"tool": "banking.get_balance", "args": {}}]},
     )
     _build_attacked_dir(asr_system, STRICT_DEFENSE, cases={"user_task_0": False})
 
@@ -329,10 +329,10 @@ def test_five_numbers_contamination_guardrail(tmp_path):
         asr_model,
         ALLOW_ALL_DEFENSE,
         cases={"user_task_0": True},
-        call_records={"run-user_task_0": [{"tool": "agentdojo.send_money", "args": {}}]},
+        call_records={"run-user_task_0": [{"tool": "banking.send_money", "args": {}}]},
         # allow_all should never block -- a stray block here means the
         # "undefended" baseline is contaminated.
-        events={"run-user_task_0": [{"outcome": "block", "decision": {"tool": "agentdojo.send_money"}}]},
+        events={"run-user_task_0": [{"outcome": "block", "decision": {"tool": "banking.send_money"}}]},
     )
     _build_attacked_dir(asr_system, STRICT_DEFENSE, cases={"user_task_0": True})
 
@@ -421,11 +421,11 @@ def test_interbolt_event_summary_excludes_superseded_retry_attempts(tmp_path):
         [
             {
                 "outcome": "block",
-                "decision": {"action": "block", "tool": "agentdojo.send_money", "matched_rule": "r1", "run_id": "attempt-1"},
+                "decision": {"action": "block", "tool": "banking.send_money", "matched_rule": "r1", "run_id": "attempt-1"},
             },
             {
                 "outcome": "block",
-                "decision": {"action": "block", "tool": "agentdojo.send_money", "matched_rule": "r1", "run_id": "attempt-2"},
+                "decision": {"action": "block", "tool": "banking.send_money", "matched_rule": "r1", "run_id": "attempt-2"},
             },
         ],
     )
@@ -458,23 +458,25 @@ def test_interbolt_event_summary_eval_errors_not_filtered(tmp_path):
 
 
 _POLICY_YAML_TEMPLATE = """\
-version: "1.0"
+version: "2.0"
 defaults:
   sink_action: allow
 sources: []
 sinks:
-  agentdojo.send_money:
-    - name: block_when_run_tainted
-      when: run.tainted
-      action: block
-    - name: default
-      action: allow
-  agentdojo.get_balance:
-    - name: block_never_fires
-      when: run.tainted
-      action: block
-    - name: default
-      action: allow
+  banking.send_money:
+    rules:
+      - name: block_when_run_tainted
+        when: run.tainted
+        action: block
+      - name: default
+        action: allow
+  banking.get_balance:
+    rules:
+      - name: block_never_fires
+        when: run.tainted
+        action: block
+      - name: default
+        action: allow
 """
 
 
@@ -507,7 +509,7 @@ def test_five_numbers_two_repeats_breakdown_and_csv(tmp_path):
         asr_model,
         ALLOW_ALL_DEFENSE,
         cases={"user_task_0": True},
-        call_records={"run-user_task_0": [{"tool": "agentdojo.send_money", "args": {}}]},
+        call_records={"run-user_task_0": [{"tool": "banking.send_money", "args": {}}]},
         repeat=0,
     )
     _build_attacked_dir(
@@ -516,7 +518,7 @@ def test_five_numbers_two_repeats_breakdown_and_csv(tmp_path):
         cases={"user_task_0": False},
         events={
             "run-user_task_0": [
-                {"outcome": "block", "decision": {"tool": "agentdojo.send_money", "matched_rule": "block_when_run_tainted"}}
+                {"outcome": "block", "decision": {"tool": "banking.send_money", "matched_rule": "block_when_run_tainted"}}
             ]
         },
         repeat=0,
@@ -532,8 +534,8 @@ def test_five_numbers_two_repeats_breakdown_and_csv(tmp_path):
         ALLOW_ALL_DEFENSE,
         cases={"user_task_0": True, "user_task_1": True},
         call_records={
-            "run-user_task_0": [{"tool": "agentdojo.send_money", "args": {}}],
-            "run-user_task_1": [{"tool": "agentdojo.send_money", "args": {}}],
+            "run-user_task_0": [{"tool": "banking.send_money", "args": {}}],
+            "run-user_task_1": [{"tool": "banking.send_money", "args": {}}],
         },
         repeat=1,
     )
@@ -543,9 +545,9 @@ def test_five_numbers_two_repeats_breakdown_and_csv(tmp_path):
         cases={"user_task_0": False, "user_task_1": True},
         events={
             "run-user_task_0": [
-                {"outcome": "block", "decision": {"tool": "agentdojo.send_money", "matched_rule": "block_when_run_tainted"}}
+                {"outcome": "block", "decision": {"tool": "banking.send_money", "matched_rule": "block_when_run_tainted"}}
             ],
-            "run-user_task_1": [{"outcome": "allow", "decision": {"tool": "agentdojo.send_money"}}],
+            "run-user_task_1": [{"outcome": "allow", "decision": {"tool": "banking.send_money"}}],
         },
         repeat=1,
         interbolt_version="0.2.0",
@@ -640,17 +642,18 @@ def test_policy_declared_block_rules_only_returns_block_action_rules(tmp_path):
     policy_path = tmp_path / "policy.yaml"
     policy_path.write_text(
         """\
-version: "1.0"
+version: "2.0"
 defaults:
   sink_action: allow
 sources: []
 sinks:
-  agentdojo.send_money:
-    - name: block_when_run_tainted
-      when: run.tainted
-      action: block
-    - name: allow_by_default
-      action: allow
+  banking.send_money:
+    rules:
+      - name: block_when_run_tainted
+        when: run.tainted
+        action: block
+      - name: allow_by_default
+        action: allow
 """
     )
     assert _policy_declared_block_rules(str(policy_path)) == frozenset({"block_when_run_tainted"})
@@ -684,8 +687,8 @@ def test_quartet_repeat_metrics_warns_on_case_missing_from_d(tmp_path, capsys):
         ALLOW_ALL_DEFENSE,
         cases={"user_task_0": True, "user_task_1": True},
         call_records={
-            "run-user_task_0": [{"tool": "agentdojo.send_money", "args": {}}],
-            "run-user_task_1": [{"tool": "agentdojo.send_money", "args": {}}],
+            "run-user_task_0": [{"tool": "banking.send_money", "args": {}}],
+            "run-user_task_1": [{"tool": "banking.send_money", "args": {}}],
         },
     )
     _build_attacked_dir(asr_system, STRICT_DEFENSE, cases={"user_task_0": False})

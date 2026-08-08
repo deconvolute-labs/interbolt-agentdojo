@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from interbolt_agentdojo.executor import DEFAULT_AGENT_ID
 from interbolt_agentdojo.run_benchmark import DEFAULT_BENCHMARK_VERSION, run
 
 _RECORDING_POLICY = "policies/generic.yaml"
@@ -39,6 +40,7 @@ def main() -> None:
     args = build_parser().parse_args()
     args.policy = _RECORDING_POLICY
     args.mode = "dry_run"
+    args.agent_id = DEFAULT_AGENT_ID
     args.repeats = 1
     args.force_rerun = False
     args.benchmark_version = DEFAULT_BENCHMARK_VERSION
