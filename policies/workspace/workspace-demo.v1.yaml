@@ -40,6 +40,54 @@
 #     free text -- no attacker-writable path (email_client.py).
 #   tool:get_current_day                                 -> trusted
 #     Scalar environment clock value, not attacker-writable.
+#
+#   The entries above are all reads. The mutating tools return values too, and
+#   InterboltToolsExecutor._dispatch taints the formatted result of *every*
+#   allowed call, so each mutating tool needs a trust call of its own. Leaving
+#   one out is not neutral: interbolt's resolve_source_trust defaults an
+#   undeclared name to untrusted and that fallback is fixed, so an omission
+#   silently taints the run. Read against their return expressions, they split
+#   two ways.
+#
+#   RECEIPT RETURNS -- the caller's own arguments echoed back alongside
+#   environment-generated scalars. No external content enters the run through
+#   them, so they are not ingress:
+#   tool:send_email                                      -> trusted
+#     Returns the Email it just built from recipients/subject/body; id_,
+#     timestamp, sender and status are environment-generated (email_client.py).
+#   tool:create_file                                     -> trusted
+#     Returns the CloudDriveFile it just built from filename/content; id_,
+#     owner, size and last_modified are environment-generated
+#     (cloud_drive_client.py).
+#   tool:create_calendar_event                           -> trusted
+#     Returns the CalendarEvent it just built from the call's own arguments.
+#     It also mails an invite as a side effect, but the return is a receipt
+#     (calendar_client.py).
+#   tool:delete_email, tool:cancel_calendar_event        -> trusted
+#     Return a fixed-format string embedding only the caller's own email_id /
+#     event_id, nothing read from the environment.
+#   tool:search_contacts_by_email                        -> trusted
+#     Same reasoning as search_contacts_by_name above: EmailContact.name is
+#     derived by splitting a validated EmailStr, never free text.
+#
+#   READ-BACK RETURNS -- mutating tools that hand the stored object back,
+#   free-form text written by some earlier call included. These are ingress in
+#   exactly the way the read tools are:
+#   tool:delete_file, tool:append_to_file, tool:share_file -> untrusted
+#     All three return the whole CloudDriveFile with .content -- the
+#     pre-existing content, not merely what this call supplied
+#     (cloud_drive_client.py).
+#   tool:reschedule_calendar_event,
+#   tool:add_calendar_event_participants                 -> untrusted
+#     Return the stored CalendarEvent with .title/.description
+#     (calendar_client.py).
+#
+#   Declaring the receipts trusted cannot launder an earlier untrusted read:
+#   run ingress accumulates and is never pruned, and run_tainted is "any entry
+#   untrusted" over it, so run.tainted only ever goes false -> true within a
+#   run. Every rule below gates on run.tainted alone, never on label-level
+#   max_trust.
+#
 #   user_prompt                                           -> trusted
 #     Declared for documentation, matching the standing convention in
 #     interbolt's packaged policy.example.yaml (`user_input`); this harness
@@ -93,6 +141,32 @@ sources:
     trust: trusted
   - name: "tool:get_current_day"
     trust: trusted
+  # Receipt returns: the call's own arguments plus environment-generated
+  # scalars. Not an ingress channel -- see TRUST CLASSIFICATION above.
+  - name: "tool:send_email"
+    trust: trusted
+  - name: "tool:create_file"
+    trust: trusted
+  - name: "tool:create_calendar_event"
+    trust: trusted
+  - name: "tool:delete_email"
+    trust: trusted
+  - name: "tool:cancel_calendar_event"
+    trust: trusted
+  - name: "tool:search_contacts_by_email"
+    trust: trusted
+  # Read-back returns: mutating tools that hand back the stored object with
+  # its free-form text. Ingress, same as the read tools.
+  - name: "tool:delete_file"
+    trust: untrusted
+  - name: "tool:append_to_file"
+    trust: untrusted
+  - name: "tool:share_file"
+    trust: untrusted
+  - name: "tool:reschedule_calendar_event"
+    trust: untrusted
+  - name: "tool:add_calendar_event_participants"
+    trust: untrusted
   - name: "user_prompt"
     trust: trusted
 
