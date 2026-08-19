@@ -51,6 +51,7 @@ def write_manifest(logdir: Path, args) -> Path:
         defense = {
             "name": "interbolt",
             "mode": args.mode,
+            "agent_id": getattr(args, "agent_id", None),
             "policy_file": str(policy_path),
             "policy_sha256": hashlib.sha256(policy_path.read_bytes()).hexdigest(),
         }

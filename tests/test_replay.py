@@ -14,7 +14,7 @@ from agentdojo.functions_runtime import FunctionCall, FunctionsRuntime, make_fun
 from agentdojo.types import ChatAssistantMessage
 from interbolt import InMemoryReporter, Policy
 
-from interbolt_agentdojo.executor import AGENT_ID, InterboltToolsExecutor
+from interbolt_agentdojo.executor import DEFAULT_AGENT_ID, InterboltToolsExecutor
 from interbolt_agentdojo.replay_policy import _evaluate_record, _load_corpus
 
 
@@ -35,7 +35,7 @@ def danger_tool(value: str) -> str:
 
 
 _RECORDING_POLICY = """
-version: "1.0"
+version: "2.0"
 defaults:
   sink_action: allow
 sources:
@@ -45,7 +45,7 @@ sinks: {}
 """
 
 _ALLOW_ALL_POLICY = """
-version: "1.0"
+version: "2.0"
 defaults:
   sink_action: allow
 sources: []
@@ -53,19 +53,20 @@ sinks: {}
 """
 
 _STRICT_POLICY = """
-version: "1.0"
+version: "2.0"
 defaults:
   sink_action: allow
 sources:
   - name: "tool:get_data"
     trust: untrusted
 sinks:
-  agentdojo.danger_tool:
-    - name: block_when_tainted
-      when: run.tainted
-      action: block
-    - name: default
-      action: allow
+  test-suite.danger_tool:
+    rules:
+      - name: block_when_tainted
+        when: run.tainted
+        action: block
+      - name: default
+        action: allow
 """
 
 
@@ -76,9 +77,9 @@ def _record_corpus(tmp_path: Path) -> Path:
 
     call_records_path = tmp_path / "call_records.jsonl"
     runtime = FunctionsRuntime(functions=[make_function(get_data), make_function(danger_tool)])
-    executor = InterboltToolsExecutor(call_records_path=call_records_path)
+    executor = InterboltToolsExecutor(call_records_path=call_records_path, suite_name="test-suite")
 
-    with interbolt.get_runtime().agent_context_sync(AGENT_ID):
+    with interbolt.get_runtime().agent_context_sync(DEFAULT_AGENT_ID):
         get_call = FunctionCall(function="get_data", args={"x": "1"}, id="1")
         _, _, _, messages, _ = executor.query(
             "q", runtime, messages=[ChatAssistantMessage(role="assistant", content=None, tool_calls=[get_call])]
@@ -106,7 +107,7 @@ def test_replay_action_deltas_between_allow_all_and_strict(tmp_path):
     allow_all_policy = Policy.from_file(str(allow_all_path))
     strict_policy = Policy.from_file(str(strict_path))
 
-    danger_record = next(r for r in records if r["tool"] == "agentdojo.danger_tool")
+    danger_record = next(r for r in records if r["tool"] == "test-suite.danger_tool")
     assert danger_record["run_tainted"] is True
 
     _, allow_all_action, _ = _evaluate_record(danger_record, allow_all_policy)

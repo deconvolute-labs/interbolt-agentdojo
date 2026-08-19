@@ -21,7 +21,7 @@ from interbolt import Policy
 from interbolt.models.protocols import Reporter
 from interbolt.utils import current_run_id
 
-from interbolt_agentdojo.executor import AGENT_ID, InterboltToolsExecutor
+from interbolt_agentdojo.executor import DEFAULT_AGENT_ID, InterboltToolsExecutor
 from interbolt_agentdojo.progress import format_duration, get_logger
 
 
@@ -51,6 +51,8 @@ def build_interbolt_pipeline(
     mode: str,
     reporter: Reporter,
     call_records_path: Path | None = None,
+    *,
+    agent_id: str = DEFAULT_AGENT_ID,
 ) -> AgentPipeline:
     """Same shape as `AgentPipeline.from_config`'s `defense is None` branch, with
     `InterboltToolsExecutor` substituted for AgentDojo's `ToolsExecutor`."""
@@ -58,7 +60,16 @@ def build_interbolt_pipeline(
 
     llm, llm_name = _resolve_llm(model)
     tools_loop = ToolsExecutionLoop(
-        [InterboltToolsExecutor(tool_result_to_str, call_records_path=call_records_path), llm]
+        [
+            InterboltToolsExecutor(
+                tool_result_to_str,
+                call_records_path=call_records_path,
+                suite_name=suite.name,
+                suite_tools=[t.name for t in suite.tools],
+                agent_id=agent_id,
+            ),
+            llm,
+        ]
     )
     pipeline = AgentPipeline([SystemMessage(load_system_message(None)), InitQuery(), llm, tools_loop])
     pipeline.name = f"{llm_name}-interbolt-{policy_path.stem}-{mode}"
@@ -75,13 +86,16 @@ class RunScopedPipeline(BasePipelineElement):
     user_task_id, injection_task_id, started_at}` -- to `run_index_path`.
     """
 
-    def __init__(self, inner: BasePipelineElement, run_index_path: Path) -> None:
+    def __init__(
+        self, inner: BasePipelineElement, run_index_path: Path, *, agent_id: str = DEFAULT_AGENT_ID
+    ) -> None:
         self.inner = inner
         # AgentDojo's benchmark loop reads `agent_pipeline.name` off the
         # outermost element (this wrapper) to route trace logging; without
         # propagating it, TraceLogger silently can't save any trace JSON.
         self.name = inner.name
         self.run_index_path = run_index_path
+        self._agent_id = agent_id
         self._seq = self._existing_row_count()
 
     def _existing_row_count(self) -> int:
@@ -98,7 +112,7 @@ class RunScopedPipeline(BasePipelineElement):
         messages: list[ChatMessage] = [],
         extra_args: dict = {},
     ):
-        with interbolt.get_runtime().agent_context_sync(AGENT_ID):
+        with interbolt.get_runtime().agent_context_sync(self._agent_id):
             run_id = current_run_id.get()
             # AgentDojo's TraceLogger pushes suite/task identity onto a context
             # stack for the whole (user_task, injection_task) case; Logger.get()

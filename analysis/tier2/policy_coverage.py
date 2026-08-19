@@ -32,7 +32,7 @@ from pathlib import Path
 
 from agentdojo.task_suite.load_suites import get_suite
 from interbolt import Action, Policy
-from interbolt_agentdojo.executor import NAMESPACE
+from interbolt_agentdojo.namespaces import resolve_namespace
 
 from analysis.common.artifacts import (
     discover_results,
@@ -90,7 +90,9 @@ def _gated_case_sinks(quartets: list[Quartet], attacked: list[AttackedCaseRow]) 
             continue
         if r.suite not in suite_obj_cache:
             suite_obj_cache[r.suite] = get_suite(b_record.benchmark_version, r.suite)
-        qualified_targets = {f"{NAMESPACE}.{t}" for t in target_tools(suite_obj_cache[r.suite], r.injection_task_id)}
+        qualified_targets = {
+            f"{resolve_namespace(r.suite, t)}.{t}" for t in target_tools(suite_obj_cache[r.suite], r.injection_task_id)
+        }
         if b_record.repeat_dir not in call_records_cache:
             call_records_cache[b_record.repeat_dir] = load_call_records(b_record.repeat_dir)
         called = {c["tool"] for c in call_records_cache[b_record.repeat_dir].get(r.run_id_b, [])}

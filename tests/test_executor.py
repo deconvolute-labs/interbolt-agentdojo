@@ -10,7 +10,7 @@ from agentdojo.logging import OutputLogger, TraceLogger
 from agentdojo.types import ChatAssistantMessage
 from interbolt import InMemoryReporter, Policy, taint
 
-from interbolt_agentdojo.executor import AGENT_ID, InterboltToolsExecutor
+from interbolt_agentdojo.executor import DEFAULT_AGENT_ID, InterboltToolsExecutor
 from interbolt_agentdojo.pipeline import RunScopedPipeline
 
 
@@ -40,7 +40,7 @@ def _assistant_message(tool_call: FunctionCall) -> ChatAssistantMessage:
 
 def _policy_text(sink_action: str, extra_sources: str = "") -> str:
     return f"""
-version: "1.0"
+version: "2.0"
 defaults:
   sink_action: allow
 sources:
@@ -48,12 +48,14 @@ sources:
     trust: trusted
 {extra_sources}
 sinks:
-  agentdojo.danger_tool:
-    - name: default
-      action: {sink_action}
-  agentdojo.probe:
-    - name: default
-      action: allow
+  test-suite.danger_tool:
+    rules:
+      - name: default
+        action: {sink_action}
+  test-suite.probe:
+    rules:
+      - name: default
+        action: allow
 """
 
 
@@ -67,8 +69,8 @@ def _configure(tmp_path, sink_action: str, mode: str = "enforce", extra_sources:
 
 def test_allow_path_executes_tool_and_taints_result(tmp_path):
     _configure(tmp_path, "allow")
-    with interbolt.get_runtime().agent_context_sync(AGENT_ID):
-        executor = InterboltToolsExecutor()
+    with interbolt.get_runtime().agent_context_sync(DEFAULT_AGENT_ID):
+        executor = InterboltToolsExecutor(suite_name="test-suite")
         tool_call = FunctionCall(function="danger_tool", args={"value": "hi"}, id="1")
         _, _, _, messages, _ = executor.query("q", _runtime(), messages=[_assistant_message(tool_call)])
 
@@ -79,8 +81,8 @@ def test_allow_path_executes_tool_and_taints_result(tmp_path):
 
 def test_block_path_does_not_execute_tool(tmp_path):
     _configure(tmp_path, "block")
-    with interbolt.get_runtime().agent_context_sync(AGENT_ID):
-        executor = InterboltToolsExecutor()
+    with interbolt.get_runtime().agent_context_sync(DEFAULT_AGENT_ID):
+        executor = InterboltToolsExecutor(suite_name="test-suite")
         tool_call = FunctionCall(function="danger_tool", args={"value": "hi"}, id="1")
         _, _, _, messages, _ = executor.query("q", _runtime(), messages=[_assistant_message(tool_call)])
 
@@ -93,8 +95,8 @@ def test_block_path_does_not_execute_tool(tmp_path):
 
 def test_approval_denied_path_does_not_execute_tool(tmp_path):
     _configure(tmp_path, "require_approval")
-    with interbolt.get_runtime().agent_context_sync(AGENT_ID):
-        executor = InterboltToolsExecutor()
+    with interbolt.get_runtime().agent_context_sync(DEFAULT_AGENT_ID):
+        executor = InterboltToolsExecutor(suite_name="test-suite")
         tool_call = FunctionCall(function="danger_tool", args={"value": "hi"}, id="1")
         _, _, _, messages, _ = executor.query("q", _runtime(), messages=[_assistant_message(tool_call)])
 
@@ -105,8 +107,8 @@ def test_approval_denied_path_does_not_execute_tool(tmp_path):
 
 def test_dry_run_executes_everything_but_emits_non_allow_decisions(tmp_path):
     reporter = _configure(tmp_path, "block", mode="dry_run")
-    with interbolt.get_runtime().agent_context_sync(AGENT_ID):
-        executor = InterboltToolsExecutor()
+    with interbolt.get_runtime().agent_context_sync(DEFAULT_AGENT_ID):
+        executor = InterboltToolsExecutor(suite_name="test-suite")
         tool_call = FunctionCall(function="danger_tool", args={"value": "hi"}, id="1")
         _, _, _, messages, _ = executor.query("q", _runtime(), messages=[_assistant_message(tool_call)])
 
@@ -127,7 +129,7 @@ class _ProbingInner:
         self.run_tainted_at_start: list[bool] = []
 
     def query(self, query, runtime, env=None, messages=None, extra_args=None):
-        decision = interbolt.get_runtime().check(tool="agentdojo.probe", args={}, agent_id=AGENT_ID)
+        decision = interbolt.get_runtime().check(tool="test-suite.probe", args={}, agent_id=DEFAULT_AGENT_ID)
         self.run_tainted_at_start.append(decision.run_tainted)
         taint("payload", source="tool:danger_tool")
         return query, runtime, env, messages or [], extra_args or {}

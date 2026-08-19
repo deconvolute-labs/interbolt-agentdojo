@@ -13,7 +13,7 @@ import csv
 from dataclasses import dataclass
 from pathlib import Path
 
-from interbolt_agentdojo.executor import NAMESPACE
+from interbolt_agentdojo.namespaces import resolve_namespace
 
 from analysis.common.artifacts import run_trajectory
 from analysis.common.discovery import ROLE_C_UTILITY, RunRecord
@@ -37,7 +37,9 @@ def compute_rows(records: list[RunRecord]) -> list[ApprovalResidualRow]:
     for record in records:
         if record.role != ROLE_C_UTILITY:
             continue
-        state_changing = {f"{NAMESPACE}.{t}" for t in STATE_CHANGING_TOOLS.get(record.suite, frozenset())}
+        state_changing = {
+            f"{resolve_namespace(record.suite, t)}.{t}" for t in STATE_CHANGING_TOOLS.get(record.suite, frozenset())
+        }
         selected, _ = run_id_to_case(record)
         attempted = blocked = 0
         for run_id in selected:

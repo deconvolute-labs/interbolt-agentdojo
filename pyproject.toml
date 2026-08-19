@@ -6,8 +6,8 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "agentdojo==0.1.35",
-    "interbolt==0.2.0",
     "anthropic",
+    "interbolt==0.3.0",
     "google-genai",
     "openai",
     "pyyaml",
@@ -29,7 +29,7 @@ analysis = ["matplotlib", "scipy"]
 # [project.dependencies], e.g. "interbolt==0.1.1". Published numbers MUST be
 # produced with the pinned state (see run_manifest.json's `interbolt.install_mode`).
 [tool.uv.sources]
-# interbolt = { path = "../interbolt", editable = true }
+interbolt = { path = "../interbolt", editable = true }
 # agentdojo = { path = "../agentdojo", editable = true }
 
 # Pinned agentdojo, for reference (published runs should switch to this form):
